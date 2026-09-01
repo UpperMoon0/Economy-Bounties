@@ -41,6 +41,7 @@ public interface BountyService {
             NOT_FOUND,
             NOT_COMPLETED,
             EXPIRED,
+            CANCELLED,
             PAYOUT_FAILED
         }
 
