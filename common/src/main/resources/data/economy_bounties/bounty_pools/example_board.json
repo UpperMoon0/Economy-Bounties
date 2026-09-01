@@ -1,0 +1,8 @@
+{
+  "id": "economy_bounties:example_board",
+  "groups": [
+    { "id": "economy_bounties:farming", "weight": 5 },
+    { "id": "economy_bounties:mining", "weight": 3 },
+    { "id": "economy_bounties:hunting", "weight": 2 }
+  ]
+}
