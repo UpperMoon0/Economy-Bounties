@@ -9,9 +9,15 @@ import java.util.UUID;
 public interface BountyService {
     void replaceDefinitions(Collection<BountyDefinition> definitions);
 
+    /** Rolls within one explicit bounty group. */
     Optional<BountyView> rollOffer(UUID playerId, NamespacedId group, RollContext context);
 
+    /** Rolls a weighted eligible group from a pool, then a weighted bounty inside that group. */
+    Optional<BountyView> rollOffer(UUID playerId, BountyPoolDefinition pool, RollContext context);
+
     Optional<BountyView> accept(UUID playerId, UUID instanceId, Instant now);
+
+    Optional<BountyView> cancel(UUID playerId, UUID instanceId, Instant now);
 
     List<BountyView> recordProgress(ProgressEvent event, Instant now);
 
