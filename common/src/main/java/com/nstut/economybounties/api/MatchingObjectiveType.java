@@ -20,7 +20,6 @@ public final class MatchingObjectiveType implements ObjectiveType {
 
     @Override
     public long progressDelta(ObjectiveDefinition definition, ProgressEvent event) {
-        if (!event.playerId().equals(event.playerId())) return 0;
         if (!id.equals(event.type())) return 0;
         if (!definition.target().equals(event.target())) return 0;
         return event.amount();
