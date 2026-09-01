@@ -1,6 +1,7 @@
 package com.nstut.economybounties.core;
 
 import com.nstut.economybounties.api.BountyDefinition;
+import com.nstut.economybounties.api.BountyPoolDefinition;
 import com.nstut.economybounties.api.BountyService;
 import com.nstut.economybounties.api.BountyStatus;
 import com.nstut.economybounties.api.BountyView;
@@ -25,13 +26,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultBountyServiceTest {
     private static final NamespacedId FARMING = NamespacedId.parse("test:farming");
+    private static final NamespacedId MINING = NamespacedId.parse("test:mining");
     private static final UUID PLAYER = UUID.fromString("12345678-1234-5678-1234-567812345678");
     private static final Instant NOW = Instant.parse("2026-09-02T00:00:00Z");
 
@@ -67,11 +69,31 @@ class DefaultBountyServiceTest {
     }
 
     @Test
+    void weightedPoolSkipsGroupsWithoutEligibleDefinitions() {
+        BountyDefinition lockedFarming = definition("test:locked_farming", FARMING, 2, 50, 100, 1, 1, 1,
+                "1.00", "1.00", Duration.ZERO);
+        BountyDefinition mining = definition("test:mining_job", MINING, 1, 0, 10, 1, 1, 1,
+                "2.00", "2.00", Duration.ZERO);
+        ProgressionProvider progression = (player, group) -> group.equals(MINING) ? 5 : 1;
+        DefaultBountyService service = service(progression, context -> RewardProvider.PayoutResult.success("tx"), new InMemoryBountyStateStore());
+        service.replaceDefinitions(List.of(lockedFarming, mining));
+
+        BountyPoolDefinition pool = new BountyPoolDefinition(NamespacedId.parse("test:work_board"), List.of(
+                new BountyPoolDefinition.GroupEntry(FARMING, 1000),
+                new BountyPoolDefinition.GroupEntry(MINING, 1)
+        ));
+        BountyView offer = service.rollOffer(PLAYER, pool, new BountyService.RollContext(11, 12, 0, NOW)).orElseThrow();
+        assertEquals(MINING, offer.definition().group());
+        assertEquals(NamespacedId.parse("test:mining_job"), offer.definition().id());
+    }
+
+    @Test
     void progressCompletesAndClaimPaysExactlyOnce() {
         AtomicInteger payouts = new AtomicInteger();
+        AtomicReference<UUID> expectedPayoutKey = new AtomicReference<>();
         RewardProvider reward = context -> {
             payouts.incrementAndGet();
-            assertEquals(context.payoutKey(), context.payoutKey());
+            assertEquals(expectedPayoutKey.get(), context.payoutKey());
             assertEquals(new BigDecimal("10.00"), context.currencyAmount());
             assertEquals("test:carrots", context.metadata().get("economy_bounties:bounty_id"));
             return RewardProvider.PayoutResult.success("economy-tx-1");
@@ -80,6 +102,7 @@ class DefaultBountyServiceTest {
         service.replaceDefinitions(List.of(definition("test:carrots", 0, 10, 1, 3, 3, "10.00", "10.00", Duration.ofHours(1))));
 
         BountyView offer = service.rollOffer(PLAYER, FARMING, new BountyService.RollContext(2, 3, 0, NOW)).orElseThrow();
+        expectedPayoutKey.set(offer.instanceId());
         BountyView active = service.accept(PLAYER, offer.instanceId(), NOW).orElseThrow();
         assertEquals(BountyStatus.ACTIVE, active.status());
 
@@ -95,6 +118,21 @@ class DefaultBountyServiceTest {
         BountyService.ClaimResult duplicate = service.claim(PLAYER, offer.instanceId(), NOW.plusSeconds(31));
         assertEquals(BountyService.ClaimResult.Status.ALREADY_CLAIMED, duplicate.status());
         assertEquals(1, payouts.get());
+    }
+
+    @Test
+    void cancelledBountyCannotProgressOrPay() {
+        DefaultBountyService service = service(ProgressionProvider.constant(1),
+                context -> RewardProvider.PayoutResult.success("unexpected"), new InMemoryBountyStateStore());
+        service.replaceDefinitions(List.of(definition("test:cancel", 0, 10, 1, 1, 1, "5.00", "5.00", Duration.ZERO)));
+        BountyView offer = service.rollOffer(PLAYER, FARMING, new BountyService.RollContext(3, 4, 0, NOW)).orElseThrow();
+        service.accept(PLAYER, offer.instanceId(), NOW);
+
+        BountyView cancelled = service.cancel(PLAYER, offer.instanceId(), NOW.plusSeconds(1)).orElseThrow();
+        assertEquals(BountyStatus.CANCELLED, cancelled.status());
+        assertEquals(List.of(), service.recordProgress(event(1), NOW.plusSeconds(2)));
+        assertEquals(BountyService.ClaimResult.Status.CANCELLED,
+                service.claim(PLAYER, offer.instanceId(), NOW.plusSeconds(3)).status());
     }
 
     @Test
@@ -162,7 +200,14 @@ class DefaultBountyServiceTest {
     private static BountyDefinition definition(String id, int minLevel, int maxLevel, int weight,
                                                long minAmount, long maxAmount, String minReward, String maxReward,
                                                Duration cooldown) {
-        return new BountyDefinition(NamespacedId.parse(id), FARMING, minLevel, maxLevel, weight,
+        return definition(id, FARMING, 1, minLevel, maxLevel, weight, minAmount, maxAmount, minReward, maxReward, cooldown);
+    }
+
+    private static BountyDefinition definition(String id, NamespacedId group, int tier,
+                                               int minLevel, int maxLevel, int weight,
+                                               long minAmount, long maxAmount, String minReward, String maxReward,
+                                               Duration cooldown) {
+        return new BountyDefinition(NamespacedId.parse(id), group, tier, minLevel, maxLevel, weight,
                 List.of(new ObjectiveDefinition(BuiltinObjectiveTypes.DELIVER_ITEM, "minecraft:carrot",
                         new LongRange(minAmount, maxAmount), Map.of())),
                 new RewardDefinition(new DecimalRange(new BigDecimal(minReward), new BigDecimal(maxReward)), Map.of()),
