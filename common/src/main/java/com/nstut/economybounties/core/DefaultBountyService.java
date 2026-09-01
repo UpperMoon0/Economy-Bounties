@@ -1,6 +1,7 @@
 package com.nstut.economybounties.core;
 
 import com.nstut.economybounties.api.BountyDefinition;
+import com.nstut.economybounties.api.BountyPoolDefinition;
 import com.nstut.economybounties.api.BountyService;
 import com.nstut.economybounties.api.BountyStateStore;
 import com.nstut.economybounties.api.BountyStatus;
@@ -70,47 +71,56 @@ public final class DefaultBountyService implements BountyService {
 
         PlayerBountyState playerState = state(playerId);
         boolean expired = playerState.expireAll(context.now());
-        int level = progressionProvider.level(playerId, group);
-        if (level < 0) throw new IllegalStateException("ProgressionProvider returned a negative level");
-
-        List<BountyDefinition> candidates = catalog.eligible(group, level).stream()
-                .filter(definition -> !playerState.onCooldown(definition.id(), context.now()))
-                .toList();
+        List<BountyDefinition> candidates = suppressHistory(playerState,
+                eligibleCandidates(playerState, playerId, group, context.now()));
         if (candidates.isEmpty()) {
             if (expired) save(playerState);
             return Optional.empty();
         }
 
-        if (historyLimit > 0) {
-            List<BountyDefinition> fresh = candidates.stream()
-                    .filter(definition -> !playerState.recent().contains(definition.id()))
-                    .toList();
-            if (!fresh.isEmpty()) candidates = fresh;
-        }
-
         long seed = DeterministicSeed.offer(context.worldSeed(), playerId, group,
                 context.rotationEpoch(), context.rerollOrdinal());
         SplittableRandom random = new SplittableRandom(seed);
-        BountyDefinition definition = weightedPick(candidates, random);
-        UUID instanceId = DeterministicSeed.uuid(random);
+        return createOffer(playerState, playerId, weightedPick(candidates, random), context, seed, random, expired);
+    }
 
-        BountyInstanceState existing = playerState.instances().get(instanceId);
-        if (existing != null) {
+    @Override
+    public synchronized Optional<BountyView> rollOffer(UUID playerId, BountyPoolDefinition pool, RollContext context) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(pool, "pool");
+        Objects.requireNonNull(context, "context");
+
+        PlayerBountyState playerState = state(playerId);
+        boolean expired = playerState.expireAll(context.now());
+        List<GroupCandidates> groups = new ArrayList<>();
+        for (BountyPoolDefinition.GroupEntry entry : pool.groups()) {
+            List<BountyDefinition> candidates = eligibleCandidates(playerState, playerId, entry.group(), context.now());
+            if (!candidates.isEmpty()) groups.add(new GroupCandidates(entry, candidates));
+        }
+        if (groups.isEmpty()) {
             if (expired) save(playerState);
-            return Optional.of(existing.view());
+            return Optional.empty();
         }
 
-        List<BountyInstanceState.ObjectiveState> objectives = new ArrayList<>();
-        for (ObjectiveDefinition objective : definition.objectives()) {
-            objectives.add(new BountyInstanceState.ObjectiveState(objective, objective.amount().choose(random)));
+        if (historyLimit > 0) {
+            boolean anyFresh = groups.stream().flatMap(group -> group.candidates().stream())
+                    .anyMatch(definition -> !playerState.recent().contains(definition.id()));
+            if (anyFresh) {
+                groups = groups.stream()
+                        .map(group -> new GroupCandidates(group.entry(), group.candidates().stream()
+                                .filter(definition -> !playerState.recent().contains(definition.id()))
+                                .toList()))
+                        .filter(group -> !group.candidates().isEmpty())
+                        .toList();
+            }
         }
 
-        BountyInstanceState instance = new BountyInstanceState(instanceId, playerId, definition,
-                context.now(), context.now().plus(definition.offerDuration()),
-                definition.reward().currency().choose(random), objectives, seed);
-        playerState.instances().put(instanceId, instance);
-        save(playerState);
-        return Optional.of(instance.view());
+        long seed = DeterministicSeed.offer(context.worldSeed(), playerId, pool.id(),
+                context.rotationEpoch(), context.rerollOrdinal());
+        SplittableRandom random = new SplittableRandom(seed);
+        GroupCandidates selectedGroup = weightedPickGroup(groups, random);
+        BountyDefinition definition = weightedPick(selectedGroup.candidates(), random);
+        return createOffer(playerState, playerId, definition, context, seed, random, expired);
     }
 
     @Override
@@ -123,6 +133,20 @@ public final class DefaultBountyService implements BountyService {
         if (instance == null) return Optional.empty();
         BountyStatus before = instance.status();
         instance.accept(now);
+        if (before != instance.status()) save(playerState);
+        return Optional.of(instance.view());
+    }
+
+    @Override
+    public synchronized Optional<BountyView> cancel(UUID playerId, UUID instanceId, Instant now) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(instanceId, "instanceId");
+        Objects.requireNonNull(now, "now");
+        PlayerBountyState playerState = state(playerId);
+        BountyInstanceState instance = playerState.instances().get(instanceId);
+        if (instance == null) return Optional.empty();
+        BountyStatus before = instance.status();
+        instance.cancel(now);
         if (before != instance.status()) save(playerState);
         return Optional.of(instance.view());
     }
@@ -217,6 +241,45 @@ public final class DefaultBountyService implements BountyService {
                 .toList();
     }
 
+    private List<BountyDefinition> eligibleCandidates(PlayerBountyState playerState, UUID playerId,
+                                                       NamespacedId group, Instant now) {
+        int level = progressionProvider.level(playerId, group);
+        if (level < 0) throw new IllegalStateException("ProgressionProvider returned a negative level for " + group);
+        return catalog.eligible(group, level).stream()
+                .filter(definition -> !playerState.onCooldown(definition.id(), now))
+                .toList();
+    }
+
+    private List<BountyDefinition> suppressHistory(PlayerBountyState playerState, List<BountyDefinition> candidates) {
+        if (historyLimit <= 0 || candidates.isEmpty()) return candidates;
+        List<BountyDefinition> fresh = candidates.stream()
+                .filter(definition -> !playerState.recent().contains(definition.id()))
+                .toList();
+        return fresh.isEmpty() ? candidates : fresh;
+    }
+
+    private Optional<BountyView> createOffer(PlayerBountyState playerState, UUID playerId,
+                                             BountyDefinition definition, RollContext context,
+                                             long seed, SplittableRandom random, boolean expired) {
+        UUID instanceId = DeterministicSeed.uuid(random);
+        BountyInstanceState existing = playerState.instances().get(instanceId);
+        if (existing != null) {
+            if (expired) save(playerState);
+            return Optional.of(existing.view());
+        }
+
+        List<BountyInstanceState.ObjectiveState> objectives = new ArrayList<>();
+        for (ObjectiveDefinition objective : definition.objectives()) {
+            objectives.add(new BountyInstanceState.ObjectiveState(objective, objective.amount().choose(random)));
+        }
+        BountyInstanceState instance = new BountyInstanceState(instanceId, playerId, definition,
+                context.now(), context.now().plus(definition.offerDuration()),
+                definition.reward().currency().choose(random), objectives, seed);
+        playerState.instances().put(instanceId, instance);
+        save(playerState);
+        return Optional.of(instance.view());
+    }
+
     private PlayerBountyState state(UUID playerId) {
         return states.computeIfAbsent(playerId, id -> stateStore.load(id)
                 .map(snapshot -> checkedSnapshot(id, snapshot))
@@ -237,14 +300,25 @@ public final class DefaultBountyService implements BountyService {
 
     private static BountyDefinition weightedPick(List<BountyDefinition> candidates, SplittableRandom random) {
         long totalWeight = 0;
-        for (BountyDefinition candidate : candidates) {
-            totalWeight = Math.addExact(totalWeight, candidate.weight());
-        }
+        for (BountyDefinition candidate : candidates) totalWeight = Math.addExact(totalWeight, candidate.weight());
         long roll = random.nextLong(totalWeight);
         for (BountyDefinition candidate : candidates) {
             if (roll < candidate.weight()) return candidate;
             roll -= candidate.weight();
         }
-        throw new IllegalStateException("Weighted selection fell through");
+        throw new IllegalStateException("Weighted bounty selection fell through");
     }
+
+    private static GroupCandidates weightedPickGroup(List<GroupCandidates> groups, SplittableRandom random) {
+        long totalWeight = 0;
+        for (GroupCandidates group : groups) totalWeight = Math.addExact(totalWeight, group.entry().weight());
+        long roll = random.nextLong(totalWeight);
+        for (GroupCandidates group : groups) {
+            if (roll < group.entry().weight()) return group;
+            roll -= group.entry().weight();
+        }
+        throw new IllegalStateException("Weighted group selection fell through");
+    }
+
+    private record GroupCandidates(BountyPoolDefinition.GroupEntry entry, List<BountyDefinition> candidates) {}
 }
