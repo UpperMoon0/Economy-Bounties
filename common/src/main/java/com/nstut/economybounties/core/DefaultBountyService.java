@@ -188,6 +188,10 @@ public final class DefaultBountyService implements BountyService {
             save(playerState);
             return new ClaimResult(ClaimResult.Status.EXPIRED, instance.view(), "Bounty expired before completion");
         }
+        if (instance.status() == BountyStatus.CANCELLED) {
+            if (expired) save(playerState);
+            return new ClaimResult(ClaimResult.Status.CANCELLED, instance.view(), "Bounty was cancelled");
+        }
         if (instance.status() != BountyStatus.COMPLETED) {
             if (expired) save(playerState);
             return new ClaimResult(ClaimResult.Status.NOT_COMPLETED, instance.view(), "Bounty is not completed");
@@ -196,6 +200,7 @@ public final class DefaultBountyService implements BountyService {
         Map<String, String> metadata = new LinkedHashMap<>(instance.definition().reward().metadata());
         metadata.put("economy_bounties:bounty_id", instance.definition().id().toString());
         metadata.put("economy_bounties:group", instance.definition().group().toString());
+        metadata.put("economy_bounties:tier", Integer.toString(instance.definition().tier()));
         metadata.put("economy_bounties:instance_id", instance.instanceId().toString());
 
         RewardProvider.PayoutResult payout;
@@ -206,7 +211,10 @@ public final class DefaultBountyService implements BountyService {
             return new ClaimResult(ClaimResult.Status.PAYOUT_FAILED, instance.view(),
                     "Reward provider threw: " + error.getClass().getSimpleName());
         }
-
+        if (payout == null) {
+            return new ClaimResult(ClaimResult.Status.PAYOUT_FAILED, instance.view(),
+                    "Reward provider returned no payout result");
+        }
         if (!payout.success()) {
             return new ClaimResult(ClaimResult.Status.PAYOUT_FAILED, instance.view(), payout.message());
         }
