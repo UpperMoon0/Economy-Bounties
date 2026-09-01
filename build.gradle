@@ -1,0 +1,24 @@
+plugins {
+    id 'base'
+}
+
+allprojects {
+    group = rootProject.maven_group
+    version = rootProject.mod_version
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+tasks.register('buildAll') {
+    group = 'build'
+    description = 'Builds all Economy Bounties modules.'
+    dependsOn ':common:build'
+}
+
+tasks.register('testAll') {
+    group = 'verification'
+    description = 'Runs all Economy Bounties tests.'
+    dependsOn ':common:test'
+}
