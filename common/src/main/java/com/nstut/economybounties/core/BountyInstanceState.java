@@ -96,6 +96,13 @@ final class BountyInstanceState {
         return true;
     }
 
+    boolean cancel(Instant now) {
+        expire(now);
+        if (status != BountyStatus.OFFERED && status != BountyStatus.ACTIVE) return false;
+        status = BountyStatus.CANCELLED;
+        return true;
+    }
+
     boolean applyProgress(ObjectiveRegistry registry, ProgressEvent event, Instant now) {
         expire(now);
         if (status != BountyStatus.ACTIVE || !playerId.equals(event.playerId())) return false;
@@ -105,9 +112,7 @@ final class BountyInstanceState {
             if (objective.complete()) continue;
             ObjectiveType type = registry.require(objective.definition.type());
             long delta = type.progressDelta(objective.definition, event);
-            if (delta > 0) {
-                changed |= objective.add(delta);
-            }
+            if (delta > 0) changed |= objective.add(delta);
         }
 
         if (changed && objectives.stream().allMatch(ObjectiveState::complete)) {
