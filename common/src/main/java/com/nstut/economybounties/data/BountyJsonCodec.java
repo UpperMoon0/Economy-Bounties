@@ -31,6 +31,7 @@ public final class BountyJsonCodec {
         JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
         NamespacedId id = NamespacedId.parse(requiredString(root, "id"));
         NamespacedId group = NamespacedId.parse(requiredString(root, "group"));
+        int tier = integer(root, "tier", 0);
         int minLevel = integer(root, "min_level", 0);
         int maxLevel = integer(root, "max_level", Integer.MAX_VALUE);
         int weight = integer(root, "weight", 1);
@@ -60,7 +61,7 @@ public final class BountyJsonCodec {
             for (JsonElement tag : root.getAsJsonArray("tags")) tags.add(tag.getAsString());
         }
 
-        return new BountyDefinition(id, group, minLevel, maxLevel, weight, objectives, reward,
+        return new BountyDefinition(id, group, tier, minLevel, maxLevel, weight, objectives, reward,
                 offerDuration, cooldown, tags);
     }
 
@@ -68,6 +69,7 @@ public final class BountyJsonCodec {
         JsonObject root = new JsonObject();
         root.addProperty("id", definition.id().toString());
         root.addProperty("group", definition.group().toString());
+        root.addProperty("tier", definition.tier());
         root.addProperty("min_level", definition.minLevel());
         root.addProperty("max_level", definition.maxLevel());
         root.addProperty("weight", definition.weight());
