@@ -8,6 +8,7 @@ import java.util.Set;
 public record BountyDefinition(
         NamespacedId id,
         NamespacedId group,
+        int tier,
         int minLevel,
         int maxLevel,
         int weight,
@@ -20,6 +21,7 @@ public record BountyDefinition(
     public BountyDefinition {
         id = Objects.requireNonNull(id, "id");
         group = Objects.requireNonNull(group, "group");
+        if (tier < 0) throw new IllegalArgumentException("tier must be >= 0");
         if (minLevel < 0 || maxLevel < minLevel) {
             throw new IllegalArgumentException("Invalid level range " + minLevel + ".." + maxLevel);
         }
