@@ -35,6 +35,7 @@ public final class EconomyMoneyAdapter implements EscrowProvider, RewardProvider
 
     private final Path journalPath;
     private final Set<UUID> completedOperations = new LinkedHashSet<>();
+    private boolean journalDirty;
 
     public EconomyMoneyAdapter() { this(null); }
 
@@ -81,7 +82,10 @@ public final class EconomyMoneyAdapter implements EscrowProvider, RewardProvider
         IAccountManager accounts = EconomyApi.accounts();
         IBankAccount target = accounts.getOrCreatePlayerAccount(reward.playerId());
         UUID txId = reward.payoutKey();
-        if (seen(target, txId)) return RewardProvider.PayoutResult.success(txId.toString());
+        if (seen(target, txId)) {
+            markCompleted(txId);
+            return RewardProvider.PayoutResult.success(txId.toString());
+        }
 
         Map<String, String> metadata = new java.util.LinkedHashMap<>(reward.metadata());
         metadata.put("economy_bounties:payout_key", reward.payoutKey().toString());
@@ -122,8 +126,8 @@ public final class EconomyMoneyAdapter implements EscrowProvider, RewardProvider
     }
 
     private synchronized void markCompleted(UUID transactionId) {
-        if (!completedOperations.add(transactionId)) return;
-        persistJournal();
+        if (completedOperations.add(transactionId)) journalDirty = true;
+        if (journalDirty) persistJournal();
     }
 
     private synchronized void loadJournal() {
@@ -141,7 +145,10 @@ public final class EconomyMoneyAdapter implements EscrowProvider, RewardProvider
     }
 
     private void persistJournal() {
-        if (journalPath == null) return;
+        if (journalPath == null) {
+            journalDirty = false;
+            return;
+        }
         try {
             Path parent = journalPath.getParent();
             if (parent != null) Files.createDirectories(parent);
@@ -153,8 +160,9 @@ public final class EconomyMoneyAdapter implements EscrowProvider, RewardProvider
             } catch (AtomicMoveNotSupportedException unsupported) {
                 Files.move(temp, journalPath, StandardCopyOption.REPLACE_EXISTING);
             }
+            journalDirty = false;
         } catch (IOException error) {
-            // The Economy transaction already committed. Recent history still protects the immediate crash window.
+            // Keep journalDirty true so the next idempotent operation retries persistence.
             LOGGER.log(System.Logger.Level.ERROR, "Failed to persist bounty operation journal " + journalPath, error);
         }
     }
