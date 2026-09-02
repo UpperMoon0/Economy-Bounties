@@ -26,6 +26,8 @@ public final class BountyBoardClient {
     }
 
     private static final class BountyBoardScreen extends UiScreen {
+        private static final int MAX_OBJECTIVES = 16;
+
         private final Signal<String> tab = Signals.of("Generated");
         private final Signal<List<BoardSnapshot.PoolEntry>> pools = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> generated = Signals.of(List.of());
@@ -44,16 +46,8 @@ public final class BountyBoardClient {
         private final Signal<String> progressionGroup = Signals.of("");
         private final Signal<String> minLevel = Signals.of("0");
         private final Signal<String> maxLevel = Signals.of(String.valueOf(Integer.MAX_VALUE));
-
-        private final Signal<String> type1 = Signals.of("economy_bounties:deliver_item");
-        private final Signal<String> target1 = Signals.of("minecraft:iron_ingot");
-        private final Signal<String> amount1 = Signals.of("16");
-        private final Signal<String> type2 = Signals.of("");
-        private final Signal<String> target2 = Signals.of("");
-        private final Signal<String> amount2 = Signals.of("");
-        private final Signal<String> type3 = Signals.of("");
-        private final Signal<String> target3 = Signals.of("");
-        private final Signal<String> amount3 = Signals.of("");
+        private final Signal<List<ObjectiveForm>> objectiveForms = Signals.of(List.of(
+                new ObjectiveForm("economy_bounties:deliver_item", "minecraft:iron_ingot", "16")));
 
         private BountyBoardScreen(BoardSnapshot snapshot) {
             super(Component.literal("Bounty Board"));
@@ -156,17 +150,16 @@ public final class BountyBoardClient {
                     field("Icon id", icon, 180),
                     Ui.row(field("Reward", reward, 90), field("Lifetime min", lifetime, 90)).gap(8),
                     Ui.divider(),
-                    Ui.heading("Objectives"),
-                    objectiveRow("1", type1, target1, amount1),
-                    objectiveRow("2", type2, target2, amount2),
-                    objectiveRow("3", type3, target3, amount3),
-                    Ui.text("Built-ins: deliver_item, deliver_fluid, kill_entity, craft_item, mine_block, visit_location"),
+                    Ui.row(Ui.heading("Objectives"), Ui.spacer(),
+                            Ui.button("+ Objective", this::addObjectiveForm).small()).gap(6),
+                    Ui.list(objectiveForms, this::objectiveRow).height(118),
+                    Ui.text("Up to 16 objectives. Built-ins: deliver_item, deliver_fluid, kill_entity, craft_item, mine_block, visit_location"),
                     Ui.divider(),
                     Ui.heading("Audience"),
                     Ui.checkbox("Public", publicAccess),
-                    field("Allowed player UUIDs (comma)", allowedPlayers, 300),
+                    field("Allowed players (name/UUID, comma)", allowedPlayers, 300),
                     field("Allowed groups (comma)", allowedGroups, 300),
-                    field("Denied player UUIDs (comma)", deniedPlayers, 300),
+                    field("Denied players (name/UUID, comma)", deniedPlayers, 300),
                     field("Progression group (optional)", progressionGroup, 220),
                     Ui.row(field("Min level", minLevel, 80), field("Max level", maxLevel, 80)).gap(8),
                     Ui.row(
@@ -176,13 +169,35 @@ public final class BountyBoardClient {
             ).gap(5));
         }
 
-        private UIComponent objectiveRow(String number, Signal<String> type, Signal<String> target, Signal<String> amount) {
+        private UIComponent objectiveRow(ObjectiveForm form) {
             return Ui.row(
-                    Ui.text("#" + number),
-                    Ui.textField(type).placeholder("objective type").width(150),
-                    Ui.textField(target).placeholder("target id").width(150),
-                    Ui.textField(amount).placeholder("amount").width(70)
-            ).gap(5);
+                    Ui.textField(form.type).placeholder("objective type").width(145),
+                    Ui.textField(form.target).placeholder("target id").width(145),
+                    Ui.textField(form.amount).placeholder("amount").width(65),
+                    Ui.button("×", () -> removeObjectiveForm(form)).danger().small()
+            ).gap(4);
+        }
+
+        private void addObjectiveForm() {
+            List<ObjectiveForm> current = objectiveForms.get();
+            if (current.size() >= MAX_OBJECTIVES) {
+                notice.set("A posted bounty can have at most " + MAX_OBJECTIVES + " objectives");
+                return;
+            }
+            List<ObjectiveForm> next = new ArrayList<>(current);
+            next.add(new ObjectiveForm("", "", "1"));
+            objectiveForms.set(List.copyOf(next));
+        }
+
+        private void removeObjectiveForm(ObjectiveForm form) {
+            List<ObjectiveForm> current = objectiveForms.get();
+            if (current.size() <= 1) {
+                notice.set("A posted bounty needs at least one objective");
+                return;
+            }
+            List<ObjectiveForm> next = new ArrayList<>(current);
+            next.remove(form);
+            objectiveForms.set(List.copyOf(next));
         }
 
         private UIComponent field(String label, Signal<String> value, int width) {
@@ -191,9 +206,9 @@ public final class BountyBoardClient {
 
         private void submitCreate() {
             List<BoardRequest.ObjectiveDraft> objectives = new ArrayList<>();
-            addObjective(objectives, type1.get(), target1.get(), amount1.get());
-            addObjective(objectives, type2.get(), target2.get(), amount2.get());
-            addObjective(objectives, type3.get(), target3.get(), amount3.get());
+            for (ObjectiveForm form : objectiveForms.get()) {
+                addObjective(objectives, form.type.get(), form.target.get(), form.amount.get());
+            }
             BoardRequest.AudienceDraft audience = new BoardRequest.AudienceDraft(
                     publicAccess.get(), split(allowedPlayers.get()), split(allowedGroups.get()), split(deniedPlayers.get()),
                     progressionGroup.get(), parseInt(minLevel.get(), 0), parseInt(maxLevel.get(), Integer.MAX_VALUE));
@@ -221,6 +236,18 @@ public final class BountyBoardClient {
         private static int parseInt(String value, int fallback) {
             try { return Integer.parseInt(value == null ? "" : value.trim()); }
             catch (NumberFormatException error) { return fallback; }
+        }
+
+        private static final class ObjectiveForm {
+            private final Signal<String> type;
+            private final Signal<String> target;
+            private final Signal<String> amount;
+
+            private ObjectiveForm(String type, String target, String amount) {
+                this.type = Signals.of(type);
+                this.target = Signals.of(target);
+                this.amount = Signals.of(amount);
+            }
         }
     }
 }
