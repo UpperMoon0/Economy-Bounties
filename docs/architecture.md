@@ -6,7 +6,7 @@ Economy Bounties is layered deliberately:
 - **Economy Bounties** owns bounty gameplay: definitions, groups, progression eligibility, deterministic weighted selection, objectives, player state, cooldowns, completion and reward dispatch.
 - **Content addons/modpacks** own concrete bounty content and progression integrations.
 
-The common bounty engine is pure Java and has no Minecraft or Economy implementation dependency. Loader adapters are expected to translate Minecraft events/datapack resources into the common API. Economy payout integration is isolated behind `RewardProvider` so the addon never needs to depend on Economy internals.
+The common bounty engine is pure Java and has no Minecraft or Economy implementation dependency. Loader adapters translate Minecraft events/datapack resources into the common API. Economy payout and escrow integration is isolated behind `RewardProvider` / `EscrowProvider`, while the Minecraft-facing adapter depends only on Economy's supported public API.
 
 ## Determinism
 
@@ -25,4 +25,6 @@ Objective and reward metadata is namespaced and immutable at API boundaries.
 
 ## Economy integration
 
-When Economy's stable API work lands, the Economy adapter should use only `com.nstut.economy.api` and a namespaced transaction cause such as `economy_bounties:bounty_reward`. It should never import `com.nstut.economy.core`, `trading`, `data`, or loader-specific implementation packages.
+Economy Bounties requires Economy 0.0.12 or later. `EconomyMoneyAdapter` uses only the supported top-level `com.nstut.economy.api` package, including `EconomyApi`, account interfaces, namespaced transaction causes and structured transaction metadata. It must never import `com.nstut.economy.api.internal`, `com.nstut.economy.core`, `trading`, `data`, or loader-specific implementation packages.
+
+CI checks the addon against the current `Economy/main` source through Gradle composite-build substitution. Runtime metadata uses 0.0.12 as the minimum version, allowing later compatible Economy releases.

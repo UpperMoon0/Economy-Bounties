@@ -16,11 +16,11 @@ jobs:
       - name: Checkout Economy Bounties
         uses: actions/checkout@v4
 
-      - name: Checkout Economy API PR head
+      - name: Checkout current Economy main
         uses: actions/checkout@v4
         with:
           repository: UpperMoon0/Economy
-          ref: cf1b6bd335613abb0340f1b3f687ec5f3a920e07
+          ref: main
           path: .deps/Economy
 
       - name: Checkout OpenUI

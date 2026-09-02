@@ -24,7 +24,7 @@ Implemented now:
 - JSON codecs for bounty definitions and weighted pools, plus example data
 - JUnit coverage and GitHub Actions CI
 
-The Minecraft loader modules and direct Economy adapter are intentionally kept outside the core contract. The Economy adapter will consume only Economy's stable public API once that API lands; it must not import Economy `core`, `trading`, `data` or loader implementation packages.
+The common bounty engine remains independent of Minecraft and Economy implementation packages. Minecraft-facing code integrates with Economy 0.0.12+ exclusively through the supported top-level `com.nstut.economy.api` surface; it must not import Economy `core`, `trading`, `data`, `api.internal` or loader implementation packages.
 
 ## Definition format
 
@@ -76,6 +76,6 @@ A loader adapter should discover bounty/pool JSON from datapack resources, decod
 
 A progression addon supplies `ProgressionProvider.level(player, group)`. Minecraft loader code translates real gameplay into `ProgressEvent`s. A reward integration implements `RewardProvider` and must treat `RewardContext.payoutKey()` as an idempotency key.
 
-For Economy, the intended transaction cause is `economy_bounties:bounty_reward`, with bounty/group/tier/instance identifiers copied into structured transaction metadata. Servers may choose a mint-backed provider or a treasury-backed provider without changing the bounty engine.
+The built-in Economy adapter uses Economy 0.0.12+'s stable public API. Bounty transactions use namespaced causes such as `economy_bounties:bounty_reward`, with bounty identifiers and payout keys copied into structured transaction metadata. Generated rewards may be mint-backed or treasury-backed; player-posted bounty funds use the Economy server account as their transfer boundary.
 
 See [`docs/architecture.md`](docs/architecture.md) for the boundary rules.
