@@ -5,6 +5,7 @@ import com.nstut.economybounties.core.DefaultBountyService;
 import com.nstut.economybounties.core.DefaultPostedBountyService;
 import com.nstut.economybounties.data.JsonDirectoryBountyStateStore;
 import com.nstut.economybounties.data.JsonFilePostedBountyStore;
+import com.nstut.economybounties.network.BountyNetwork;
 import dev.architectury.event.events.common.LifecycleEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,6 +37,8 @@ public final class EconomyBountiesRuntime {
         if (initialized) return;
         initialized = true;
         BuiltinObjectiveTypes.registerAll(OBJECTIVES);
+        BountyNetwork.registerCommon();
+        BountyBoardCommands.register();
         BountyDataReloadListener.register();
         BountyObjectiveEvents.register();
         LifecycleEvent.SERVER_STARTED.register(EconomyBountiesRuntime::start);
@@ -45,7 +48,7 @@ public final class EconomyBountiesRuntime {
     private static synchronized void start(MinecraftServer minecraftServer) {
         server = Objects.requireNonNull(minecraftServer, "minecraftServer");
         Path dataRoot = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(MOD_ID);
-        EconomyMoneyAdapter money = new EconomyMoneyAdapter();
+        EconomyMoneyAdapter money = new EconomyMoneyAdapter(dataRoot.resolve("economy_operations.json"));
         ProgressionProvider progression = (playerId, group) -> MinecraftAudienceProvider.experienceLevel(server, playerId);
         generated = new DefaultBountyService(progression, money, OBJECTIVES,
                 new JsonDirectoryBountyStateStore(dataRoot.resolve("players")), 12);
