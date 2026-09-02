@@ -20,6 +20,9 @@ import java.util.UUID;
 /** Resolves every board action against server-owned state; clients only send intent. */
 public final class BountyBoardServer {
     private static final int MAX_CREATE_OBJECTIVES = 16;
+    private static final int MAX_AUDIENCE_ENTRIES = 128;
+    private static final int MAX_OUTSTANDING_GENERATED = 32;
+    private static final int MAX_OUTSTANDING_POSTED_BY_PLAYER = 64;
     private static final long MAX_LIFETIME_MINUTES = 60L * 24L * 30L;
 
     private BountyBoardServer() { }
@@ -74,6 +77,12 @@ public final class BountyBoardServer {
     }
 
     private static String roll(ServerPlayer player, String poolId) {
+        long outstanding = EconomyBountiesRuntime.generatedFor(player.getUUID(), Instant.now()).stream()
+                .filter(view -> view.status() == BountyStatus.OFFERED || view.status() == BountyStatus.ACTIVE || view.status() == BountyStatus.COMPLETED)
+                .count();
+        if (outstanding >= MAX_OUTSTANDING_GENERATED) {
+            return "Finish, claim, cancel, or let existing bounties expire before rolling more";
+        }
         NamespacedId id = NamespacedId.parse(required(poolId, "pool id"));
         if (!EconomyBountiesRuntime.pools().containsKey(id)) return "Unknown bounty pool: " + id;
         return EconomyBountiesRuntime.roll(player, id).isPresent()
@@ -138,6 +147,15 @@ public final class BountyBoardServer {
         if (draft.lifetimeMinutes() < 1 || draft.lifetimeMinutes() > MAX_LIFETIME_MINUTES) {
             throw new IllegalArgumentException("Lifetime must be between 1 minute and 30 days");
         }
+        long ownOutstanding = EconomyBountiesRuntime.posted().listCreatedBy(player.getUUID(), Instant.now()).stream()
+                .filter(view -> view.status() != PostedBountyStatus.CLAIMED
+                        && view.status() != PostedBountyStatus.CANCELLED
+                        && view.status() != PostedBountyStatus.EXPIRED)
+                .count();
+        if (ownOutstanding >= MAX_OUTSTANDING_POSTED_BY_PLAYER) {
+            throw new IllegalArgumentException("You already have too many outstanding posted bounties");
+        }
+
         BigDecimal reward;
         try { reward = new BigDecimal(required(draft.reward(), "reward")); }
         catch (NumberFormatException error) { throw new IllegalArgumentException("Reward must be a valid decimal number"); }
@@ -166,8 +184,9 @@ public final class BountyBoardServer {
 
     private static BountyAudience audience(BoardRequest.AudienceDraft draft) {
         draft = draft == null ? BoardRequest.AudienceDraft.publicAudience() : draft;
-        Set<UUID> allowedPlayers = uuids(draft.allowedPlayers(), "allowed player");
-        Set<UUID> deniedPlayers = uuids(draft.deniedPlayers(), "denied player");
+        Set<UUID> allowedPlayers = playerIds(draft.allowedPlayers(), "allowed player");
+        Set<UUID> deniedPlayers = playerIds(draft.deniedPlayers(), "denied player");
+        if (draft.allowedGroups().size() > MAX_AUDIENCE_ENTRIES) throw new IllegalArgumentException("Too many allowed groups");
         Set<String> allowedGroups = new LinkedHashSet<>();
         for (String value : draft.allowedGroups()) if (value != null && !value.isBlank()) allowedGroups.add(value.trim());
         Optional<NamespacedId> progression = draft.progressionGroup() == null || draft.progressionGroup().isBlank()
@@ -176,13 +195,22 @@ public final class BountyBoardServer {
                 progression, draft.minLevel(), draft.maxLevel());
     }
 
-    private static Set<UUID> uuids(List<String> values, String label) {
+    private static Set<UUID> playerIds(List<String> values, String label) {
         Set<UUID> result = new LinkedHashSet<>();
         if (values == null) return result;
+        if (values.size() > MAX_AUDIENCE_ENTRIES) throw new IllegalArgumentException("Too many " + label + " entries");
         for (String value : values) {
             if (value == null || value.isBlank()) continue;
-            try { result.add(UUID.fromString(value.trim())); }
-            catch (IllegalArgumentException error) { throw new IllegalArgumentException("Invalid " + label + " UUID: " + value); }
+            String trimmed = value.trim();
+            try {
+                result.add(UUID.fromString(trimmed));
+                continue;
+            } catch (IllegalArgumentException ignored) {
+                // User-facing forms may use online player names; offline targets should use UUIDs.
+            }
+            ServerPlayer online = EconomyBountiesRuntime.server().getPlayerList().getPlayerByName(trimmed);
+            if (online == null) throw new IllegalArgumentException("Unknown " + label + ": " + trimmed + " (use UUID for offline players)");
+            result.add(online.getUUID());
         }
         return result;
     }
