@@ -16,22 +16,25 @@ jobs:
       - name: Checkout Economy Bounties
         uses: actions/checkout@v4
 
+      # Keep dependency source checkouts outside .deps so Bounties does not use
+      # Gradle composite substitution. Publishing first validates the same
+      # public artifact/API boundary that a real third-party addon consumes.
       - name: Checkout current Economy main
         uses: actions/checkout@v4
         with:
           repository: UpperMoon0/Economy
           ref: main
-          path: .deps/Economy
+          path: upstream/Economy
 
       - name: Checkout OpenUI
         uses: actions/checkout@v4
         with:
           repository: UpperMoon0/OpenUI-MC
           ref: 7ffd919c4d6b2b73583357d68f479cc8384c51c7
-          path: .deps/OpenUI-MC
+          path: upstream/OpenUI-MC
 
       - name: Set up Java 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '25'
@@ -40,6 +43,43 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.1.0'
+
+      - name: Publish OpenUI dependency to Maven local
+        working-directory: upstream/OpenUI-MC
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-parallel \
+            :common-1.20.1:publishToMavenLocal \
+            :fabric-1.20.1:publishToMavenLocal \
+            :forge-1.20.1:publishToMavenLocal \
+            :common-1.21.1:publishToMavenLocal \
+            :fabric-1.21.1:publishToMavenLocal \
+            :neoforge-1.21.1:publishToMavenLocal \
+            :neoforge-26.1.2:publishToMavenLocal
+
+      - name: Publish current Economy main to Maven local
+        working-directory: upstream/Economy
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-parallel \
+            :common-1.20.1:publishToMavenLocal \
+            :fabric-1.20.1:publishToMavenLocal \
+            :forge-1.20.1:publishToMavenLocal \
+            :common-1.21.1:publishToMavenLocal \
+            :fabric-1.21.1:publishToMavenLocal \
+            :neoforge-1.21.1:publishToMavenLocal \
+            :neoforge-26.1.2:publishToMavenLocal
+
+      - name: Verify dependency artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          economy_version="$(sed -n 's/^economy_version=//p' gradle.properties | head -n1)"
+          openui_version="$(sed -n 's/^openui_version=//p' gradle.properties | head -n1)"
+          test -f "$HOME/.m2/repository/com/nstut/economy-fabric-1.20.1/$economy_version/economy-fabric-1.20.1-$economy_version.jar"
+          test -f "$HOME/.m2/repository/com/nstut/economy-forge-1.20.1/$economy_version/economy-forge-1.20.1-$economy_version-dev-shadow.jar"
+          test -f "$HOME/.m2/repository/com/nstut/economy-neoforge-26.1.2/$economy_version/economy-neoforge-26.1.2-$economy_version.jar"
+          test -f "$HOME/.m2/repository/com/nstut/openui-mc-forge-1.20.1/$openui_version/openui-mc-forge-1.20.1-$openui_version-dev-shadow.jar"
 
       - name: Test all supported targets
         run: gradle --no-daemon testAllVersions
