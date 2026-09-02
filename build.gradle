@@ -1,24 +1,72 @@
 plugins {
-    id 'base'
+    id 'dev.architectury.loom' version '1.11-SNAPSHOT' apply false
+    id 'architectury-plugin' version '3.4-SNAPSHOT'
+    id 'com.gradleup.shadow' version '8.3.6' apply false
 }
+
+rootProject.ext.minecraft_version = '1.20.1'
+rootProject.ext.architectury_api_version = '9.2.14'
+rootProject.ext.fabric_loader_version = '0.16.14'
+rootProject.ext.fabric_api_version = '0.92.5+1.20.1'
+rootProject.ext.forge_version = '1.20.1-47.4.0'
+
+architectury { minecraft = rootProject.ext.minecraft_version }
 
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
-
     repositories {
+        mavenLocal()
         mavenCentral()
+        maven { url 'https://maven.architectury.dev/' }
+        maven { url 'https://maven.neoforged.net/releases' }
+    }
+}
+
+subprojects {
+    if (project.name in ['common', 'neoforge-26.1.2']) return
+    apply plugin: 'dev.architectury.loom'
+    apply plugin: 'architectury-plugin'
+    apply plugin: 'maven-publish'
+
+    def mc21 = project.name.contains('1.21.1')
+    def commonProjectName = project.name.replace('fabric', 'common').replace('neoforge', 'common').replace('forge', 'common')
+    def commonProject = rootProject.findProject(commonProjectName)
+    def mcVersion = mc21 ? '1.21.1' : (commonProject?.findProperty('minecraft_version') ?: rootProject.ext.minecraft_version)
+    base { archivesName = "${rootProject.archives_name}-${project.name}" }
+    loom { silentMojangMappingsLicense() }
+    dependencies {
+        minecraft "net.minecraft:minecraft:${mcVersion}"
+        mappings loom.officialMojangMappings()
+    }
+    java {
+        withSourcesJar()
+        sourceCompatibility = mc21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
+        targetCompatibility = mc21 ? JavaVersion.VERSION_21 : JavaVersion.VERSION_17
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.release = mc21 ? 21 : 17
+        options.encoding = 'UTF-8'
+    }
+    tasks.withType(JavaExec).configureEach {
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(mc21 ? 21 : 17) }
+    }
+    tasks.withType(Test).configureEach { useJUnitPlatform() }
+    publishing {
+        publications {
+            mavenJava(MavenPublication) { artifactId = base.archivesName.get(); from components.java }
+        }
     }
 }
 
 tasks.register('buildAll') {
     group = 'build'
-    description = 'Builds all Economy Bounties modules.'
-    dependsOn ':common:build'
+    dependsOn ':fabric-1.20.1:build', ':forge-1.20.1:build', ':fabric-1.21.1:build', ':neoforge-1.21.1:build', ':neoforge-26.1.2:build'
 }
 
-tasks.register('testAll') {
+tasks.register('testAllVersions') {
     group = 'verification'
-    description = 'Runs all Economy Bounties tests.'
-    dependsOn ':common:test'
+    dependsOn ':common:test', ':common-1.20.1:test', ':common-1.21.1:test', ':fabric-1.20.1:test', ':forge-1.20.1:test', ':fabric-1.21.1:test', ':neoforge-1.21.1:test', ':neoforge-26.1.2:test'
 }
+
+tasks.register('testAll') { group = 'verification'; dependsOn 'testAllVersions' }

@@ -10,25 +10,39 @@ permissions:
   contents: read
 
 jobs:
-  common:
+  all-targets:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Economy Bounties
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Checkout Economy API PR head
+        uses: actions/checkout@v4
+        with:
+          repository: UpperMoon0/Economy
+          ref: cf1b6bd335613abb0340f1b3f687ec5f3a920e07
+          path: .deps/Economy
+
+      - name: Checkout OpenUI
+        uses: actions/checkout@v4
+        with:
+          repository: UpperMoon0/OpenUI-MC
+          ref: 7ffd919c4d6b2b73583357d68f479cc8384c51c7
+          path: .deps/OpenUI-MC
+
+      - name: Set up Java 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '25'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '9.1.0'
 
-      - name: Test
-        run: gradle --no-daemon testAll
+      - name: Test all supported targets
+        run: gradle --no-daemon testAllVersions
 
-      - name: Build
+      - name: Build all supported targets
         run: gradle --no-daemon buildAll
