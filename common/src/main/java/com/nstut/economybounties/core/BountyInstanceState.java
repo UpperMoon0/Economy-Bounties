@@ -107,11 +107,12 @@ final class BountyInstanceState {
     boolean applyProgress(ObjectiveRegistry registry, ProgressEvent event, Instant now) {
         expire(now);
         if (status != BountyStatus.ACTIVE || !playerId.equals(event.playerId())) return false;
-        if (!ProgressScope.applies(event, "generated", instanceId)) return false;
 
         boolean changed = false;
-        for (ObjectiveState objective : objectives) {
+        for (int objectiveIndex = 0; objectiveIndex < objectives.size(); objectiveIndex++) {
+            ObjectiveState objective = objectives.get(objectiveIndex);
             if (objective.complete()) continue;
+            if (!ProgressScope.applies(event, "generated", instanceId, objectiveIndex)) continue;
             ObjectiveType type = registry.require(objective.definition.type());
             long delta = type.progressDelta(objective.definition, event);
             if (delta > 0) changed |= objective.add(delta);
