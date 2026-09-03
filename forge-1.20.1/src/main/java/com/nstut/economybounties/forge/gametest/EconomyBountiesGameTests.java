@@ -32,28 +32,33 @@ import java.util.Set;
 @GameTestHolder(EconomyBountiesRuntime.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class EconomyBountiesGameTests {
-    private EconomyBountiesGameTests() {
-    }
+    private EconomyBountiesGameTests() { }
 
     @GameTest(template = "economy_bounties_gametest_empty", timeoutTicks = 80)
-    public static void generatedItemDeliveryConsumesRealInventoryAndCompletesExactObjective(GameTestHelper helper) {
+    public static void generatedDeliveriesConsumeRealInventoryAndCompleteExactObjectives(GameTestHelper helper) {
         helper.assertTrue(EconomyBountiesRuntime.ready(),
                 "Economy Bounties runtime must be ready before GameTests execute");
 
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         NamespacedId group = NamespacedId.parse("economy_bounties:gametest_delivery");
         BountyDefinition definition = new BountyDefinition(
-                NamespacedId.parse("economy_bounties:gametest_iron_delivery"),
+                NamespacedId.parse("economy_bounties:gametest_delivery"),
                 group,
                 1,
                 0,
                 100,
                 1,
-                List.of(new ObjectiveDefinition(
-                        BuiltinObjectiveTypes.DELIVER_ITEM,
-                        "minecraft:iron_ingot",
-                        new LongRange(5, 5),
-                        Map.of())),
+                List.of(
+                        new ObjectiveDefinition(
+                                BuiltinObjectiveTypes.DELIVER_ITEM,
+                                "minecraft:iron_ingot",
+                                new LongRange(5, 5),
+                                Map.of()),
+                        new ObjectiveDefinition(
+                                BuiltinObjectiveTypes.DELIVER_FLUID,
+                                "minecraft:water",
+                                new LongRange(1_000, 1_000),
+                                Map.of())),
                 new RewardDefinition(new DecimalRange(BigDecimal.ONE, BigDecimal.ONE), Map.of()),
                 Duration.ofMinutes(5),
                 Duration.ZERO,
@@ -73,7 +78,7 @@ public final class EconomyBountiesGameTests {
                 "Accepted GameTest bounty must become active");
 
         player.getInventory().add(new ItemStack(Items.IRON_INGOT, 8));
-        String result = BountyDeliveryService.deliver(
+        String itemResult = BountyDeliveryService.deliver(
                 player,
                 "generated",
                 offered.instanceId().toString(),
@@ -81,17 +86,44 @@ public final class EconomyBountiesGameTests {
                 BuiltinObjectiveTypes.DELIVER_ITEM.toString(),
                 "minecraft:iron_ingot");
 
-        BountyView after = EconomyBountiesRuntime.generated()
+        BountyView afterItems = EconomyBountiesRuntime.generated()
                 .get(player.getUUID(), offered.instanceId(), Instant.now())
                 .orElseThrow(() -> new AssertionError("Delivered bounty must still exist"));
-        helper.assertTrue(after.objectives().get(0).progress() == 5,
-                "Delivery must credit exactly the required five items");
-        helper.assertTrue(after.status() == BountyStatus.COMPLETED,
-                "Completing the only objective must complete the bounty");
+        helper.assertTrue(afterItems.objectives().get(0).progress() == 5,
+                "Item delivery must credit exactly the required five items");
+        helper.assertTrue(afterItems.objectives().get(1).progress() == 0,
+                "Item delivery must not fan out to the fluid objective");
+        helper.assertTrue(afterItems.status() == BountyStatus.ACTIVE,
+                "Completing only the item objective must leave the bounty active");
         helper.assertTrue(countItem(player, Items.IRON_INGOT) == 3,
                 "Server inventory must retain exactly the three undelivered iron ingots");
-        helper.assertTrue(result.startsWith("Delivered 5 item"),
-                "Delivery response must report the credited amount");
+        helper.assertTrue(itemResult.startsWith("Delivered 5 item"),
+                "Item delivery response must report the credited amount");
+
+        player.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        String fluidResult = BountyDeliveryService.deliver(
+                player,
+                "generated",
+                offered.instanceId().toString(),
+                1,
+                BuiltinObjectiveTypes.DELIVER_FLUID.toString(),
+                "minecraft:water");
+
+        BountyView afterFluid = EconomyBountiesRuntime.generated()
+                .get(player.getUUID(), offered.instanceId(), Instant.now())
+                .orElseThrow(() -> new AssertionError("Completed bounty must still exist"));
+        helper.assertTrue(afterFluid.objectives().get(0).progress() == 5,
+                "Fluid delivery must not change the completed item objective");
+        helper.assertTrue(afterFluid.objectives().get(1).progress() == 1_000,
+                "Fluid delivery must credit exactly one bucket worth of fluid");
+        helper.assertTrue(afterFluid.status() == BountyStatus.COMPLETED,
+                "Completing both exact objectives must complete the bounty");
+        helper.assertTrue(countItem(player, Items.WATER_BUCKET) == 0,
+                "Delivered water bucket must be consumed");
+        helper.assertTrue(countItem(player, Items.BUCKET) == 1,
+                "Fluid delivery must return one empty bucket to the server inventory");
+        helper.assertTrue(fluidResult.startsWith("Delivered 1000 fluid units"),
+                "Fluid delivery response must report the credited amount");
 
         helper.succeed();
     }
