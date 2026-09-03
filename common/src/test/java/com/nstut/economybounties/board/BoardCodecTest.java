@@ -2,6 +2,7 @@ package com.nstut.economybounties.board;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -54,6 +55,26 @@ class BoardCodecTest {
         String oversized = "x".repeat(BoardCodec.MAX_JSON_CHARS + 1);
         assertThrows(IllegalArgumentException.class, () -> BoardCodec.decodeRequest(oversized));
         assertThrows(IllegalArgumentException.class, () -> BoardCodec.decodeSnapshot(oversized));
+    }
+
+    @Test
+    void requestModelRejectsOversizedFieldsAndCollections() {
+        assertThrows(IllegalArgumentException.class, () -> new BoardRequest.CreateDraft(
+                "x".repeat(BoardRequest.MAX_TITLE_CHARS + 1), "", "minecraft:paper", "1", 60,
+                List.of(), BoardRequest.AudienceDraft.publicAudience()));
+        assertThrows(IllegalArgumentException.class, () -> new BoardRequest.ObjectiveDraft(
+                "economy_bounties:deliver_item", "x".repeat(BoardRequest.MAX_IDENTIFIER_CHARS + 1), 1));
+        assertThrows(IllegalArgumentException.class, () -> new BoardRequest.AudienceDraft(
+                true,
+                Collections.nCopies(BoardRequest.MAX_AUDIENCE_ENTRIES + 1, "00000000-0000-0000-0000-000000000001"),
+                List.of(), List.of(), "", 0, Integer.MAX_VALUE));
+    }
+
+    @Test
+    void decoderCannotBypassPerFieldBounds() {
+        String oversizedPool = "x".repeat(BoardRequest.MAX_IDENTIFIER_CHARS + 1);
+        String json = "{\"action\":\"ROLL\",\"poolId\":\"" + oversizedPool + "\"}";
+        assertThrows(RuntimeException.class, () -> BoardCodec.decodeRequest(json));
     }
 
     @Test
