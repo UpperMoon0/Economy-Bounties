@@ -48,6 +48,7 @@ public record BoardSnapshot(
     }
 
     public record ObjectiveEntry(
+            int index,
             String type,
             String target,
             long targetAmount,
@@ -55,6 +56,7 @@ public record BoardSnapshot(
             boolean deliverable
     ) {
         public ObjectiveEntry {
+            if (index < 0) throw new IllegalArgumentException("objective index must be >= 0");
             type = requireText(type, "type");
             target = requireText(target, "target");
             if (targetAmount < 0 || progress < 0) throw new IllegalArgumentException("objective amounts must be >= 0");
