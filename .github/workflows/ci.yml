@@ -57,6 +57,14 @@ jobs:
             :neoforge-1.21.1:publishToMavenLocal \
             :neoforge-26.1.2:publishToMavenLocal
 
+      # Economy currently uses the Gradle 8.14 wrapper. Gradle 8.14 supports
+      # running on Java 24, while Bounties/OpenUI need Java 25 for 26.1.2.
+      - name: Set up Java 24 for Economy build
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '24'
+
       - name: Publish current Economy main to Maven local
         working-directory: upstream/Economy
         run: |
@@ -69,6 +77,12 @@ jobs:
             :fabric-1.21.1:publishToMavenLocal \
             :neoforge-1.21.1:publishToMavenLocal \
             :neoforge-26.1.2:publishToMavenLocal
+
+      - name: Restore Java 25 for Bounties
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
 
       - name: Verify dependency artifacts
         shell: bash
