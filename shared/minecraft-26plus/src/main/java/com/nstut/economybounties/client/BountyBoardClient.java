@@ -113,7 +113,7 @@ public final class BountyBoardClient {
                 row.add(Ui.spacer());
                 if (objective.deliverable()) {
                     row.add(Ui.button("Deliver", () -> BountyNetwork.sendRequest(
-                            BoardRequest.deliver(objective.type(), objective.target()))).success().small());
+                            BoardRequest.deliver(bounty.source(), bounty.id(), objective.type(), objective.target()))).success().small());
                 }
                 objectiveRows.add(Ui.row(row.toArray(UIComponent[]::new)).gap(4));
             }
