@@ -114,12 +114,12 @@ public final class DefaultPostedBountyService implements PostedBountyService {
         boolean dirty = false;
         for (PostedBountyView view : List.copyOf(bounties.values())) {
             if (view.status() != PostedBountyStatus.ACTIVE || !event.playerId().equals(view.claimantId())) continue;
-            if (!ProgressScope.applies(event, "posted", view.bountyId())) continue;
             List<PostedBountyObjectiveView> updated = new ArrayList<>(view.objectives().size());
             boolean viewChanged = false;
-            for (PostedBountyObjectiveView objective : view.objectives()) {
+            for (int objectiveIndex = 0; objectiveIndex < view.objectives().size(); objectiveIndex++) {
+                PostedBountyObjectiveView objective = view.objectives().get(objectiveIndex);
                 long progress = objective.progress();
-                if (!objective.complete()) {
+                if (!objective.complete() && ProgressScope.applies(event, "posted", view.bountyId(), objectiveIndex)) {
                     ObjectiveType type = objectiveRegistry.require(objective.definition().type());
                     long delta = type.progressDelta(objective.definition(), event);
                     if (delta < 0) throw new IllegalStateException("ObjectiveType returned a negative progress delta");
