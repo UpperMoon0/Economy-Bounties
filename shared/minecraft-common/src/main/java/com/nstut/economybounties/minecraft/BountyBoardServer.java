@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 /** Resolves every board action against server-owned state; clients only send intent. */
 public final class BountyBoardServer {
@@ -48,7 +49,7 @@ public final class BountyBoardServer {
                 case CLAIM_POSTED -> posted(player, request.bountyId(), PostedAction.CLAIM);
                 case CREATE_POSTED -> createPosted(player, request.create());
                 case DELIVER -> BountyDeliveryService.deliver(player, request.bountySource(), request.bountyId(),
-                        request.objectiveType(), request.objectiveTarget());
+                        request.objectiveIndex(), request.objectiveType(), request.objectiveTarget());
             };
         } catch (IllegalArgumentException error) {
             notice = error.getMessage() == null ? "Invalid bounty request" : error.getMessage();
@@ -218,9 +219,11 @@ public final class BountyBoardServer {
 
     private static BoardSnapshot.BountyEntry generatedEntry(BountyView view) {
         boolean active = view.status() == BountyStatus.ACTIVE;
-        List<BoardSnapshot.ObjectiveEntry> objectives = view.objectives().stream().map(objective -> new BoardSnapshot.ObjectiveEntry(
-                objective.definition().type().toString(), objective.definition().target(), objective.requiredAmount(), objective.progress(),
-                active && isDelivery(objective.definition().type()))).toList();
+        List<BoardSnapshot.ObjectiveEntry> objectives = IntStream.range(0, view.objectives().size()).mapToObj(index -> {
+            BountyObjectiveView objective = view.objectives().get(index);
+            return new BoardSnapshot.ObjectiveEntry(index, objective.definition().type().toString(), objective.definition().target(),
+                    objective.requiredAmount(), objective.progress(), active && isDelivery(objective.definition().type()));
+        }).toList();
         return new BoardSnapshot.BountyEntry(view.instanceId().toString(), "generated",
                 view.definition().id().toString(), "Group " + view.definition().group() + " • Tier " + view.definition().tier(), "",
                 view.rewardAmount().toPlainString(), view.status().name(), view.expiresAt().getEpochSecond(), objectives,
@@ -231,9 +234,11 @@ public final class BountyBoardServer {
 
     private static BoardSnapshot.BountyEntry postedEntry(UUID playerId, PostedBountyView view) {
         boolean activeForPlayer = view.status() == PostedBountyStatus.ACTIVE && playerId.equals(view.claimantId());
-        List<BoardSnapshot.ObjectiveEntry> objectives = view.objectives().stream().map(objective -> new BoardSnapshot.ObjectiveEntry(
-                objective.definition().type().toString(), objective.definition().target(), objective.targetAmount(), objective.progress(),
-                activeForPlayer && isDelivery(objective.definition().type()))).toList();
+        List<BoardSnapshot.ObjectiveEntry> objectives = IntStream.range(0, view.objectives().size()).mapToObj(index -> {
+            PostedBountyObjectiveView objective = view.objectives().get(index);
+            return new BoardSnapshot.ObjectiveEntry(index, objective.definition().type().toString(), objective.definition().target(),
+                    objective.targetAmount(), objective.progress(), activeForPlayer && isDelivery(objective.definition().type()));
+        }).toList();
         String owner = "Creator " + shortId(view.creatorId());
         if (view.claimantId() != null) owner += " • Claimant " + shortId(view.claimantId());
         return new BoardSnapshot.BountyEntry(view.bountyId().toString(), "posted", view.title(), owner,
