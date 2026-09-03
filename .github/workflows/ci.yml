@@ -70,6 +70,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --no-parallel \
+            :common:publishToMavenLocal \
             :common-1.20.1:publishToMavenLocal \
             :fabric-1.20.1:publishToMavenLocal \
             :forge-1.20.1:publishToMavenLocal \
@@ -90,6 +91,7 @@ jobs:
           set -euo pipefail
           economy_version="$(sed -n 's/^economy_version=//p' gradle.properties | head -n1)"
           openui_version="$(sed -n 's/^openui_version=//p' gradle.properties | head -n1)"
+          test -f "$HOME/.m2/repository/com/nstut/economy-common/$economy_version/economy-common-$economy_version.jar"
           test -f "$HOME/.m2/repository/com/nstut/economy-fabric-1.20.1/$economy_version/economy-fabric-1.20.1-$economy_version.jar"
           test -f "$HOME/.m2/repository/com/nstut/economy-forge-1.20.1/$economy_version/economy-forge-1.20.1-$economy_version-dev-shadow.jar"
           test -f "$HOME/.m2/repository/com/nstut/economy-neoforge-26.1.2/$economy_version/economy-neoforge-26.1.2-$economy_version.jar"
