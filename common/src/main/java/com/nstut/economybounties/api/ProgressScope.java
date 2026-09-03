@@ -12,26 +12,32 @@ import java.util.UUID;
 public final class ProgressScope {
     public static final String SOURCE_KEY = "economy_bounties:scope_source";
     public static final String BOUNTY_ID_KEY = "economy_bounties:scope_bounty_id";
+    public static final String OBJECTIVE_INDEX_KEY = "economy_bounties:scope_objective_index";
 
     private ProgressScope() { }
 
-    public static boolean applies(ProgressEvent event, String source, UUID bountyId) {
+    public static boolean applies(ProgressEvent event, String source, UUID bountyId, int objectiveIndex) {
         Objects.requireNonNull(event, "event");
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(bountyId, "bountyId");
         String scopedSource = event.metadata().get(SOURCE_KEY);
         String scopedId = event.metadata().get(BOUNTY_ID_KEY);
-        if (scopedSource == null && scopedId == null) return true;
-        return source.equals(scopedSource) && bountyId.toString().equals(scopedId);
+        String scopedObjective = event.metadata().get(OBJECTIVE_INDEX_KEY);
+        if (scopedSource == null && scopedId == null && scopedObjective == null) return true;
+        if (!source.equals(scopedSource) || !bountyId.toString().equals(scopedId)) return false;
+        return scopedObjective == null || Integer.toString(objectiveIndex).equals(scopedObjective);
     }
 
-    public static Map<String, String> metadata(String source, UUID bountyId, Map<String, String> extra) {
+    public static Map<String, String> metadata(String source, UUID bountyId, int objectiveIndex,
+                                                Map<String, String> extra) {
         if (source == null || source.isBlank()) throw new IllegalArgumentException("source must not be blank");
         Objects.requireNonNull(bountyId, "bountyId");
+        if (objectiveIndex < 0) throw new IllegalArgumentException("objectiveIndex must be >= 0");
         Map<String, String> values = new LinkedHashMap<>();
         if (extra != null) values.putAll(extra);
         values.put(SOURCE_KEY, source);
         values.put(BOUNTY_ID_KEY, bountyId.toString());
+        values.put(OBJECTIVE_INDEX_KEY, Integer.toString(objectiveIndex));
         return Map.copyOf(values);
     }
 }
