@@ -6,6 +6,7 @@ import java.util.List;
 public record BoardRequest(
         Action action,
         String bountyId,
+        String bountySource,
         String poolId,
         String objectiveType,
         String objectiveTarget,
@@ -14,6 +15,7 @@ public record BoardRequest(
     public BoardRequest {
         if (action == null) throw new NullPointerException("action");
         bountyId = clean(bountyId);
+        bountySource = clean(bountySource);
         poolId = clean(poolId);
         objectiveType = clean(objectiveType);
         objectiveTarget = clean(objectiveTarget);
@@ -80,23 +82,23 @@ public record BoardRequest(
     }
 
     public static BoardRequest refresh() {
-        return new BoardRequest(Action.REFRESH, "", "", "", "", null);
+        return new BoardRequest(Action.REFRESH, "", "", "", "", "", null);
     }
 
     public static BoardRequest bounty(Action action, String id) {
-        return new BoardRequest(action, id, "", "", "", null);
+        return new BoardRequest(action, id, "", "", "", "", null);
     }
 
     public static BoardRequest roll(String poolId) {
-        return new BoardRequest(Action.ROLL, "", poolId, "", "", null);
+        return new BoardRequest(Action.ROLL, "", "", poolId, "", "", null);
     }
 
-    public static BoardRequest deliver(String type, String target) {
-        return new BoardRequest(Action.DELIVER, "", "", type, target, null);
+    public static BoardRequest deliver(String source, String bountyId, String type, String target) {
+        return new BoardRequest(Action.DELIVER, bountyId, source, "", type, target, null);
     }
 
     public static BoardRequest create(CreateDraft draft) {
-        return new BoardRequest(Action.CREATE_POSTED, "", "", "", "", draft);
+        return new BoardRequest(Action.CREATE_POSTED, "", "", "", "", "", draft);
     }
 
     private static String clean(String value) { return value == null ? "" : value.trim(); }
