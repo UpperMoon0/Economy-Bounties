@@ -12,6 +12,7 @@ import com.nstut.economybounties.api.PostedBountyStatus;
 import com.nstut.economybounties.api.PostedBountyStore;
 import com.nstut.economybounties.api.PostedBountyView;
 import com.nstut.economybounties.api.ProgressEvent;
+import com.nstut.economybounties.api.ProgressScope;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -113,6 +114,7 @@ public final class DefaultPostedBountyService implements PostedBountyService {
         boolean dirty = false;
         for (PostedBountyView view : List.copyOf(bounties.values())) {
             if (view.status() != PostedBountyStatus.ACTIVE || !event.playerId().equals(view.claimantId())) continue;
+            if (!ProgressScope.applies(event, "posted", view.bountyId())) continue;
             List<PostedBountyObjectiveView> updated = new ArrayList<>(view.objectives().size());
             boolean viewChanged = false;
             for (PostedBountyObjectiveView objective : view.objectives()) {
