@@ -4,6 +4,21 @@ def commonProject = project(':common-1.20.1')
 ext.minecraft_version = commonProject.minecraft_version
 ext.architectury_api_version = commonProject.architectury_api_version
 ext.forge_version = commonProject.forge_version
+def bountyModId = rootProject.mod_id
+
+loom {
+    forge {
+    }
+    runs {
+        gameTestServer {
+            server()
+            environment("gametestserver")
+            runDir("run/gametest")
+            property "forge.enabledGameTestNamespaces", bountyModId
+        }
+    }
+}
+
 architectury { platformSetupLoomIde(); forge() }
 configurations {
     common { canBeResolved = true; canBeConsumed = false }
@@ -28,5 +43,13 @@ processResources {
             mod_authors: rootProject.mod_authors, minecraft_version: project.minecraft_version, economy_version: rootProject.economy_version, openui_version: rootProject.openui_version
     filesMatching('META-INF/mods.toml') { expand(inputs.properties) }
 }
+
+// GameTest classes/templates are development-only. Keep them available to the
+// real-server run while excluding them from production artifacts.
+tasks.withType(Jar).configureEach {
+    exclude 'com/nstut/economybounties/forge/gametest/**'
+    exclude 'data/economy_bounties/structures/economy_bounties_gametest_empty.nbt'
+}
+
 shadowJar { configurations = [project.configurations.shadowBundle]; archiveClassifier = 'dev-shadow' }
 remapJar { inputFile.set shadowJar.archiveFile }

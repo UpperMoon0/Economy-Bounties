@@ -100,5 +100,8 @@ jobs:
       - name: Test all supported targets
         run: gradle --no-daemon testAllVersions
 
+      - name: Run canonical real-server GameTest
+        run: gradle --no-daemon :forge-1.20.1:runGameTestServer
+
       - name: Build all supported targets
         run: gradle --no-daemon buildAll
