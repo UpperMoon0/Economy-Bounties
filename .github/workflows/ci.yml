@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Do not spend a full dependency build on obsolete commits after a PR update.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   all-targets:
     runs-on: ubuntu-latest
