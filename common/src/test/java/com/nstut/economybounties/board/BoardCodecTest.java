@@ -21,6 +21,18 @@ class BoardCodecTest {
     }
 
     @Test
+    void deliveryRoundTripPreservesExactContractAndObjective() {
+        BoardRequest original = BoardRequest.deliver("posted", "00000000-0000-0000-0000-000000000001", 3,
+                "economy_bounties:deliver_item", "minecraft:iron_ingot");
+
+        BoardRequest decoded = BoardCodec.decodeRequest(BoardCodec.encodeRequest(original));
+
+        assertEquals(original, decoded);
+        assertEquals("posted", decoded.bountySource());
+        assertEquals(3, decoded.objectiveIndex());
+    }
+
+    @Test
     void snapshotRoundTripPreservesActionCapabilities() {
         BoardSnapshot original = new BoardSnapshot(
                 List.of(new BoardSnapshot.PoolEntry("economy_bounties:village")),
@@ -28,7 +40,7 @@ class BoardCodecTest {
                         "00000000-0000-0000-0000-000000000001", "generated", "economy_bounties:iron",
                         "Tier 2", "", "100", "ACTIVE", 1234,
                         List.of(new BoardSnapshot.ObjectiveEntry(
-                                "economy_bounties:deliver_item", "minecraft:iron_ingot", 16, 5, true)),
+                                0, "economy_bounties:deliver_item", "minecraft:iron_ingot", 16, 5, true)),
                         false, true, false)),
                 List.of(), "Delivered 5 items");
 
