@@ -8,6 +8,7 @@ import com.nstut.economybounties.api.ObjectiveDefinition;
 import com.nstut.economybounties.api.ObjectiveRegistry;
 import com.nstut.economybounties.api.ObjectiveType;
 import com.nstut.economybounties.api.ProgressEvent;
+import com.nstut.economybounties.api.ProgressScope;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -106,6 +107,7 @@ final class BountyInstanceState {
     boolean applyProgress(ObjectiveRegistry registry, ProgressEvent event, Instant now) {
         expire(now);
         if (status != BountyStatus.ACTIVE || !playerId.equals(event.playerId())) return false;
+        if (!ProgressScope.applies(event, "generated", instanceId)) return false;
 
         boolean changed = false;
         for (ObjectiveState objective : objectives) {
