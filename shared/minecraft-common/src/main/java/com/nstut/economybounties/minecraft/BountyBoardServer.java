@@ -47,7 +47,8 @@ public final class BountyBoardServer {
                 case CANCEL_POSTED -> posted(player, request.bountyId(), PostedAction.CANCEL);
                 case CLAIM_POSTED -> posted(player, request.bountyId(), PostedAction.CLAIM);
                 case CREATE_POSTED -> createPosted(player, request.create());
-                case DELIVER -> BountyDeliveryService.deliver(player, request.objectiveType(), request.objectiveTarget());
+                case DELIVER -> BountyDeliveryService.deliver(player, request.bountySource(), request.bountyId(),
+                        request.objectiveType(), request.objectiveTarget());
             };
         } catch (IllegalArgumentException error) {
             notice = error.getMessage() == null ? "Invalid bounty request" : error.getMessage();
