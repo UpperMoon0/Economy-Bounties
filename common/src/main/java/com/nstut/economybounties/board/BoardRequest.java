@@ -10,6 +10,7 @@ public record BoardRequest(
         String poolId,
         String objectiveType,
         String objectiveTarget,
+        int objectiveIndex,
         CreateDraft create
 ) {
     public BoardRequest {
@@ -82,23 +83,23 @@ public record BoardRequest(
     }
 
     public static BoardRequest refresh() {
-        return new BoardRequest(Action.REFRESH, "", "", "", "", "", null);
+        return new BoardRequest(Action.REFRESH, "", "", "", "", "", -1, null);
     }
 
     public static BoardRequest bounty(Action action, String id) {
-        return new BoardRequest(action, id, "", "", "", "", null);
+        return new BoardRequest(action, id, "", "", "", "", -1, null);
     }
 
     public static BoardRequest roll(String poolId) {
-        return new BoardRequest(Action.ROLL, "", "", poolId, "", "", null);
+        return new BoardRequest(Action.ROLL, "", "", poolId, "", "", -1, null);
     }
 
-    public static BoardRequest deliver(String source, String bountyId, String type, String target) {
-        return new BoardRequest(Action.DELIVER, bountyId, source, "", type, target, null);
+    public static BoardRequest deliver(String source, String bountyId, int objectiveIndex, String type, String target) {
+        return new BoardRequest(Action.DELIVER, bountyId, source, "", type, target, objectiveIndex, null);
     }
 
     public static BoardRequest create(CreateDraft draft) {
-        return new BoardRequest(Action.CREATE_POSTED, "", "", "", "", "", draft);
+        return new BoardRequest(Action.CREATE_POSTED, "", "", "", "", "", -1, draft);
     }
 
     private static String clean(String value) { return value == null ? "" : value.trim(); }
