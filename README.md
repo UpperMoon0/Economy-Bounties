@@ -4,6 +4,16 @@ A data-driven bounty and commission addon for Minecraft, built on [Economy](http
 
 Economy Bounties owns bounty gameplay: groups, tiers, deterministic generation, progression eligibility, objectives, player-posted contracts, escrow lifecycle, completion tracking, persistence and rewards. Economy remains responsible for accounts, currency and transactions.
 
+## Automatic Orders (Hay Day-style)
+
+The **Orders** tab on the same OpenUI Bounty Board fills automatically from independent, weighted *item inputs* and *reward tiers*. There is no Roll button. Filter **All / Personal / Town / Special** to browse six personal delivery slots, shared first-come town dispatches, daily specials and time-limited event boards. Accept an offer to create a normal generated bounty; finish and claim it under **Contracts** before its slot restocks. Personal orders may be discarded for a cooldown. No player funds these server-generated orders.
+
+Included datapack examples: `farm_orders`, `town_dispatch`, `daily_special`, and `harvest_festival`. Inputs define items, quantity ranges, relative weights, progression levels and reference prices; reward tiers independently define rarity weights, multipliers, bonuses, and one of `none`, `offer` or `accept` deadline policies. Optional UTC availability windows and event epoch ranges support daily and seasonal content.
+
+Rewards use Economy's read-only Market price quotation API when a price is available; otherwise they use the datapack's reference price. Market quotes are bounded to 0.5–2 times the configured reference to resist spoofed listings, and every board has an absolute payout ceiling. The client cannot submit rewards, quantities or inventory progress.
+
+See **[Automatic Orders: configuration, UX and recovery](docs/automatic-orders.md)** for the schema, authoring guide, timer semantics, persistence and failure modes.
+
 ## Playable flow
 
 Run `/bounties` to open the server-backed OpenUI bounty board.
