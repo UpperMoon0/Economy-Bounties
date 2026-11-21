@@ -941,42 +941,115 @@ public final class BountyBoardClient {
             ).gap(3);
         }
 
+        /** Compact live card: visual hierarchy instead of raw ID paragraphs. */
         private UIComponent createPreview(int height) {
             List<UIComponent> content = new ArrayList<>();
-            content.add(Ui.heading("Live preview"));
             content.add(centeredRow(
-                    OrderItemIcons.icon(icon.get()).size(25),
-                    Ui.column(
-                            Ui.heading(title.get().isBlank() ? "Untitled bounty" : title.get())
-                                    .nowrap().ellipsis(true),
-                            Ui.text(publicAccess.get() ? "Public contract" : "Restricted audience")
-                                    .nowrap().ellipsis(true)
-                    ).gap(3).flex()
+                    Ui.icon(new ItemStack(Items.BOOK)).size(17),
+                    Ui.heading("Job preview")
             ).gap(5));
-            if (!description.get().isBlank()) content.add(Ui.text(description.get()));
-            content.add(Ui.divider());
-            content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
-                    Ui.heading("$" + reward.get()), Ui.spacer()).gap(4));
-            content.add(Ui.text("Lifetime: " + lifetime.get() + " minutes"));
-            content.add(Ui.heading("Objectives"));
-            for (ObjectiveForm obj : objectiveForms.get()) {
+            content.add(Ui.card(Ui.column(
+                    centeredRow(
+                            OrderItemIcons.icon(icon.get()).size(29),
+                            Ui.heading(title.get().isBlank() ? "Untitled job" : title.get())
+                                    .nowrap().ellipsis(true).flex()
+                    ).gap(6),
+                    centeredRow(
+                            Ui.badge(Component.literal(publicAccess.get() ? "Public" : "Restricted"),
+                                    publicAccess.get() ? Badge.Variant.SUCCESS : Badge.Variant.WARNING),
+                            Ui.badge(Component.literal("Player job"), Badge.Variant.NEUTRAL)
+                    ).gap(4),
+                    description.get().isBlank() ? Ui.spacer().height(1)
+                            : Ui.text(description.get())
+            ).gap(5)).padding(5));
+            content.add(centeredRow(
+                    Ui.card(Ui.column(
+                            centeredRow(Ui.icon("$", 0x5BE0BC),
+                                    Ui.text("Reward")).gap(4),
+                            Ui.heading("$" + reward.get()).nowrap().ellipsis(true)
+                    ).gap(3)).padding(4),
+                    Ui.card(Ui.column(
+                            centeredRow(Ui.icon(new ItemStack(Items.CLOCK)).size(16),
+                                    Ui.text("Expires")).gap(4),
+                            Ui.heading(friendlyLifetime(lifetime.get()))
+                                    .nowrap().ellipsis(true)
+                    ).gap(3)).padding(4)
+            ).gap(4));
+            content.add(centeredRow(
+                    Ui.icon(new ItemStack(Items.CHEST)).size(18),
+                    Ui.heading("Objectives"), Ui.spacer(),
+                    Ui.badge(Component.literal(String.valueOf(objectiveForms.get().size())),
+                            Badge.Variant.NEUTRAL)
+            ).gap(4));
+            for (ObjectiveForm objective : objectiveForms.get()) {
+                String type = objective.type.get(), target = objective.target.get();
                 content.add(Ui.card(Ui.column(
-                        Ui.text(readableItem(obj.type.get())).nowrap().ellipsis(true),
-                        centeredRow(OrderItemIcons.icon(obj.target.get()),
-                                Ui.text(obj.amount.get() + " " + readableItem(obj.target.get()))
-                                        .nowrap().ellipsis(true).flex()).gap(4)
-                ).gap(3)).padding(4));
+                        centeredRow(objectiveIcon(type, target),
+                                Ui.text(objectiveLabel(type)).nowrap().ellipsis(true).flex()
+                        ).gap(4),
+                        Ui.text(objective.amount.get() + " x " + readableItem(target))
+                                .nowrap().ellipsis(true)
+                ).gap(3)).padding(5));
             }
-            content.add(Ui.text("The server verifies payout funding and permissions on submission."));
             return Ui.card(Ui.column(
                     Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5)).flex(),
                     Ui.divider(),
                     centeredRow(
-                            Ui.button("Back", () -> tab.set("Posted")).ghost().small(),
-                            Ui.button("Preview", this::validateCreateDraft).small(),
-                            Ui.button("Create & fund", this::submitCreate).primary().small()
-                    ).gap(3).justify(Justification.END)
+                            Ui.icon(new ItemStack(Items.EMERALD)).size(16)
+                                    .tooltip("The server reserves your Economy reward when you post"),
+                            Ui.spacer(),
+                            Ui.button("Check", this::validateCreateDraft).small()
+                                    .tooltip("Check required fields"),
+                            Ui.button("Post", this::submitCreate).primary().small()
+                                    .tooltip("Post and fund this bounty")
+                    ).gap(4).justify(Justification.END)
             ).gap(4)).padding(4).height(height);
+        }
+
+        private static String friendlyLifetime(String value) {
+            long minutes = parseLong(value, 0);
+            if (minutes <= 0) return "Set time";
+            if (minutes % 1440 == 0) return (minutes / 1440) + "d";
+            if (minutes >= 60) return (minutes / 60) + "h " + (minutes % 60) + "m";
+            return minutes + "m";
+        }
+
+        private static String objectiveLabel(String type) {
+            if (type == null) return "Objective";
+            return switch (type.substring(type.indexOf(':') + 1)) {
+                case "deliver_item" -> "Deliver items";
+                case "deliver_fluid" -> "Deliver fluid";
+                case "kill_entity" -> "Defeat mobs";
+                case "craft_item" -> "Craft items";
+                case "mine_block" -> "Mine blocks";
+                case "visit_location" -> "Visit dimension";
+                default -> readableItem(type);
+            };
+        }
+
+        private static UIComponent objectiveIcon(String type, String target) {
+            String action = type == null ? "" : type.substring(type.indexOf(':') + 1);
+            ItemStack sprite = switch (action) {
+                case "deliver_fluid" -> new ItemStack(Items.BUCKET);
+                case "kill_entity" -> new ItemStack(Items.IRON_SWORD);
+                case "craft_item" -> new ItemStack(Items.CRAFTING_TABLE);
+                case "mine_block" -> new ItemStack(Items.IRON_PICKAXE);
+                case "visit_location" -> new ItemStack(Items.COMPASS);
+                default -> null;
+            };
+            return sprite == null ? OrderItemIcons.icon(target).size(18)
+                    : Ui.icon(sprite).size(18);
+        }
+
+        private void useHeldItem(Signal<String> target, Signal<String> quickPick) {
+            var player = Minecraft.getInstance().player;
+            if (player == null || player.getMainHandItem().isEmpty()) {
+                notice.set("Hold an item first");
+                return;
+            }
+            target.set(BuiltInRegistries.ITEM.getKey(
+                    player.getMainHandItem().getItem()).toString());
+            quickPick.set("");
         }
 
         private UIComponent advancedAudienceForm(int width) {
@@ -998,42 +1071,141 @@ public final class BountyBoardClient {
                     Ui.textField(value).width(width)).gap(3);
         }
 
+        /**
+         * Each task is one natural-height card. Presets and held items cover
+         * ordinary gameplay; Custom ID remains available for modded assets.
+         */
         private UIComponent objectiveRow(ObjectiveForm form) {
-            int half = Math.max(49, (Math.max(96, (mainWidth() * 55) / 100) - 28) / 2);
+            int editorWidth = Math.max(94, (Math.max(145, mainWidth() - 8) * 55) / 100);
+            int rowWidth = Math.max(80, editorWidth - 32);
             return Ui.card(Ui.column(
                     centeredRow(
-                            Ui.select(form.type).option("Deliver item", "economy_bounties:deliver_item")
-                                    .option("Deliver fluid", "economy_bounties:deliver_fluid")
-                                    .option("Kill entity", "economy_bounties:kill_entity")
-                                    .option("Craft item", "economy_bounties:craft_item")
-                                    .option("Mine block", "economy_bounties:mine_block")
-                                    .option("Visit location", "economy_bounties:visit_location")
-                                    .width(Math.max(82, half + 20)),
-                            Ui.spacer(),
-                            Ui.button("×", () -> removeObjectiveForm(form)).danger().small()
+                            Ui.component(() -> {
+                                String type = form.type.get(), target = form.target.get();
+                                return List.of(Ui.node("objective-summary", type + "/" + target,
+                                        () -> centeredRow(
+                                                objectiveIcon(type, target),
+                                                Ui.text(readableItem(target)).nowrap()
+                                                        .ellipsis(true).flex()
+                                        ).gap(4)));
+                            }).flex(),
+                            Ui.textField(form.amount).numeric().placeholder("#")
+                                    .width(36).tooltip("Required quantity"),
+                            Ui.button("x", () -> removeObjectiveForm(form)).danger().small()
+                                    .tooltip("Remove this objective")
                     ).gap(3),
                     centeredRow(
-                            Ui.textField(form.target).placeholder("target ID").width(Math.max(70, half + 17)),
-                            Ui.textField(form.amount).placeholder("qty").numeric().width(43)
-                    ).gap(3)
-            ).gap(2)).padding(3);
+                            Ui.select(form.type)
+                                    .option(Component.literal("Deliver"), "economy_bounties:deliver_item",
+                                            Ui.icon(new ItemStack(Items.CHEST)))
+                                    .option(Component.literal("Fluid"), "economy_bounties:deliver_fluid",
+                                            Ui.icon(new ItemStack(Items.BUCKET)))
+                                    .option(Component.literal("Defeat"), "economy_bounties:kill_entity",
+                                            Ui.icon(new ItemStack(Items.IRON_SWORD)))
+                                    .option(Component.literal("Craft"), "economy_bounties:craft_item",
+                                            Ui.icon(new ItemStack(Items.CRAFTING_TABLE)))
+                                    .option(Component.literal("Mine"), "economy_bounties:mine_block",
+                                            Ui.icon(new ItemStack(Items.IRON_PICKAXE)))
+                                    .option(Component.literal("Visit"), "economy_bounties:visit_location",
+                                            Ui.icon(new ItemStack(Items.COMPASS)))
+                                    .onChange(type -> {
+                                        form.target.set(defaultObjectiveTarget(type));
+                                        form.quickPick.set("");
+                                    }).width(Math.max(88, rowWidth - 30)),
+                            Ui.button("ID", () -> form.customTarget.set(!form.customTarget.get()))
+                                    .ghost().small().tooltip("Edit custom target ID")
+                    ).gap(3),
+                    centeredRow(
+                            Ui.component(() -> {
+                                String type = form.type.get();
+                                return List.of(Ui.node("objective-options", type,
+                                        () -> quickObjectivePicker(form, type,
+                                                Math.max(86, rowWidth - 54))));
+                            }).flex(),
+                            Ui.component(() -> {
+                                String type = form.type.get();
+                                boolean held = type.endsWith(":deliver_item")
+                                        || type.endsWith(":craft_item") || type.endsWith(":mine_block");
+                                return List.of(Ui.node("held-selector", type, () ->
+                                        held ? Ui.button("Held", () ->
+                                                useHeldItem(form.target, form.quickPick))
+                                                .small().tooltip("Use the item in your hand")
+                                                : Ui.spacer().height(1)));
+                            })
+                    ).gap(3),
+                    Ui.component(() -> {
+                        boolean custom = form.customTarget.get();
+                        return List.of(Ui.node("custom-target", String.valueOf(custom),
+                                () -> custom ? Ui.textField(form.target)
+                                        .placeholder("mod:item_id").width(rowWidth)
+                                        .tooltip("Advanced registry ID for this objective")
+                                        : Ui.spacer().height(1)));
+                    })
+            ).gap(3)).padding(4);
+        }
+
+        private UIComponent quickObjectivePicker(ObjectiveForm form, String type, int width) {
+            var choice = Ui.select(form.quickPick).option("Choose target...", "");
+            switch (type.substring(type.indexOf(':') + 1)) {
+                case "deliver_item" -> {
+                    choice.option("Iron Ingot", "minecraft:iron_ingot")
+                            .option("Oak Log", "minecraft:oak_log")
+                            .option("Wheat", "minecraft:wheat")
+                            .option("Carrot", "minecraft:carrot")
+                            .option("Potato", "minecraft:potato");
+                }
+                case "craft_item" -> choice.option("Bread", "minecraft:bread")
+                        .option("Torch", "minecraft:torch")
+                        .option("Oak Planks", "minecraft:oak_planks");
+                case "mine_block" -> choice.option("Stone", "minecraft:stone")
+                        .option("Oak Log", "minecraft:oak_log")
+                        .option("Iron Ore", "minecraft:iron_ore");
+                case "deliver_fluid" -> choice.option("Water", "minecraft:water")
+                        .option("Lava", "minecraft:lava");
+                case "kill_entity" -> choice.option("Zombie", "minecraft:zombie")
+                        .option("Skeleton", "minecraft:skeleton")
+                        .option("Creeper", "minecraft:creeper");
+                case "visit_location" -> choice.option("Overworld", "minecraft:overworld")
+                        .option("Nether", "minecraft:the_nether")
+                        .option("End", "minecraft:the_end");
+                default -> { }
+            }
+            return choice.onChange(selected -> {
+                if (!selected.isBlank()) form.target.set(selected);
+            }).width(width);
+        }
+
+        private static String defaultObjectiveTarget(String type) {
+            return switch (type.substring(type.indexOf(':') + 1)) {
+                case "craft_item" -> "minecraft:bread";
+                case "mine_block" -> "minecraft:stone";
+                case "deliver_fluid" -> "minecraft:water";
+                case "kill_entity" -> "minecraft:zombie";
+                case "visit_location" -> "minecraft:overworld";
+                default -> "minecraft:iron_ingot";
+            };
         }
 
         private void validateCreateDraft() {
-            if (title.get().isBlank()) { notice.set("Enter a title before creating"); return; }
+            if (validateDraftFields())
+                notice.set("Draft ready. The server will verify reward funding.");
+        }
+
+        private boolean validateDraftFields() {
+            if (title.get().isBlank()) { notice.set("Enter a job title"); return false; }
             if (moneyValue(reward.get()).signum() <= 0) {
-                notice.set("Reward must be greater than zero"); return;
+                notice.set("Reward must be greater than zero"); return false;
             }
             if (parseLong(lifetime.get(), 0) <= 0) {
-                notice.set("Lifetime must be at least one minute"); return;
+                notice.set("Lifetime must be at least one minute"); return false;
             }
             for (ObjectiveForm objective : objectiveForms.get()) {
                 if (objective.type.get().isBlank() || objective.target.get().isBlank()
                         || parseLong(objective.amount.get(), 0) <= 0) {
-                    notice.set("Every objective needs a type, target and quantity"); return;
+                    notice.set("Each task needs a target and quantity"); return false;
                 }
             }
-            notice.set("Preview valid. Server will verify funds and audience on creation.");
+            return true;
         }
 
         private void addObjectiveForm() {
@@ -1071,6 +1243,7 @@ public final class BountyBoardClient {
         }
 
         private void submitCreate() {
+            if (!validateDraftFields()) return;
             List<BoardRequest.ObjectiveDraft> objectives = new ArrayList<>();
             for (ObjectiveForm form : objectiveForms.get()) {
                 addObjective(objectives, form.type.get(), form.target.get(), form.amount.get());
@@ -1108,6 +1281,8 @@ public final class BountyBoardClient {
             private final Signal<String> type;
             private final Signal<String> target;
             private final Signal<String> amount;
+        private final Signal<String> quickPick = Signals.of("");
+        private final Signal<Boolean> customTarget = Signals.of(false);
 
             private ObjectiveForm(String type, String target, String amount) {
                 this.type = Signals.of(type);
