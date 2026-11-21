@@ -194,9 +194,16 @@ public final class OrderBoardService {
         OrderBoardDefinition.Prize prize = pick(prizes, rng, OrderBoardDefinition.Prize::weight);
         long quantity = input.amount().choose(rng);
         BigDecimal unit = valueProvider.unitValue(input);
-        // Missing/invalid market prices are not allowed to increase payouts.
-        if (unit == null || unit.signum() <= 0 || unit.compareTo(input.referencePrice().multiply(new BigDecimal("10"))) > 0)
-            unit = input.referencePrice();
+        // Live Market asks/bids are manipulable. Bounded quote anchoring prevents
+        // price-wash or self-trading from minting disproportionate order rewards.
+        BigDecimal reference = input.referencePrice();
+        if (unit == null || unit.signum() <= 0
+                || unit.compareTo(reference.multiply(new BigDecimal("10"))) > 0) {
+            unit = reference;
+        } else {
+            unit = unit.max(reference.multiply(new BigDecimal("0.50")))
+                    .min(reference.multiply(new BigDecimal("2.00")));
+        }
         BigDecimal amount = unit.multiply(BigDecimal.valueOf(quantity))
                 .multiply(prize.multiplier()).add(prize.bonus())
                 .max(board.minReward()).min(board.maxReward()).setScale(2, RoundingMode.HALF_UP);

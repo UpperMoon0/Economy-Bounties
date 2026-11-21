@@ -145,6 +145,16 @@ class OrderBoardServiceTest {
     }
 
     @Test
+    void marketPriceQuotesAreClampedBeforeMintingRewards() {
+        var board = config(OrderBoardDefinition.Scope.PERSONAL,OrderBoardDefinition.Timer.NONE,1);
+        var manager = new OrderBoardService(temp,123,service(temp,new AtomicInteger()),
+                ignored -> new BigDecimal("8.00"));
+        manager.replaceDefinitions(List.of(board));
+        // 3 wheat x capped 4.00 market price x 2 + 1.00 bonus
+        assertEquals("25.00",manager.list(A,0,NOW).get(0).reward());
+    }
+
+    @Test
     void eventWindowIsEnforcedWithoutDeletingExistingState() {
         var earlier = config(OrderBoardDefinition.Scope.PERSONAL,OrderBoardDefinition.Timer.NONE,1);
         var event = new OrderBoardDefinition(earlier.id(),earlier.scope(),earlier.slots(),

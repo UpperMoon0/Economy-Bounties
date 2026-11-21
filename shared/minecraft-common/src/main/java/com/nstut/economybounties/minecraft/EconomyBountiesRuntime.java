@@ -58,7 +58,9 @@ public final class EconomyBountiesRuntime {
         generated = new DefaultBountyService(progression, money, OBJECTIVES,
                 new JsonDirectoryBountyStateStore(dataRoot.resolve("players")), 12);
         generated.replaceDefinitions(definitions);
-        orders = new OrderBoardService(dataRoot, server.overworld().getSeed(), generated);
+        orders = new OrderBoardService(dataRoot, server.overworld().getSeed(), generated,
+                input -> com.nstut.economy.api.MarketPriceQuotes.quoteItem(input.target())
+                        .orElse(input.referencePrice()));
         orders.replaceDefinitions(orderBoards);
         posted = new DefaultPostedBountyService(new MinecraftAudienceProvider(server), OBJECTIVES,
                 new JsonFilePostedBountyStore(dataRoot.resolve("posted_bounties.json")), money);
