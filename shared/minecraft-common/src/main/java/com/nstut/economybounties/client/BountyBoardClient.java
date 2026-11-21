@@ -3,9 +3,11 @@ package com.nstut.economybounties.client;
 import com.nstut.economybounties.board.BoardRequest;
 import com.nstut.economybounties.board.BoardSnapshot;
 import com.nstut.economybounties.network.BountyNetwork;
+import com.nstut.openui.api.HStack;
 import com.nstut.openui.api.UIComponent;
 import com.nstut.openui.api.Ui;
 import com.nstut.openui.minecraft.UiScreen;
+import com.nstut.openui.layout.Alignment;
 import com.nstut.openui.state.Signal;
 import com.nstut.openui.state.Signals;
 import net.minecraft.client.Minecraft;
@@ -72,7 +74,7 @@ public final class BountyBoardClient {
         @Override
         protected UIComponent buildUI() {
             return Ui.card(Ui.column(
-                    Ui.row(
+                    centeredRow(
                             Ui.title("Bounty Board"),
                             Ui.spacer(),
                             Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small(),
@@ -99,7 +101,7 @@ public final class BountyBoardClient {
 
         private UIComponent postedPanel() {
             return Ui.column(
-                    Ui.row(Ui.heading("Player-posted bounties"), Ui.spacer(),
+                    centeredRow(Ui.heading("Player-posted bounties"), Ui.spacer(),
                             Ui.button("Create", () -> tab.set("Create")).primary().small()).gap(6),
                     Ui.list(posted, this::bountyCard).height(235)
             ).gap(5);
@@ -115,7 +117,7 @@ public final class BountyBoardClient {
                     row.add(Ui.button("Deliver", () -> BountyNetwork.sendRequest(
                             BoardRequest.deliver(bounty.source(), bounty.id(), objective.index(), objective.type(), objective.target()))).success().small());
                 }
-                objectiveRows.add(Ui.row(row.toArray(UIComponent[]::new)).gap(4));
+                objectiveRows.add(centeredRow(row.toArray(UIComponent[]::new)).gap(4));
             }
             List<UIComponent> actions = new ArrayList<>();
             if (bounty.canAccept()) actions.add(Ui.button("Accept", () -> sendBountyAction(bounty, true, false, false)).primary().small());
@@ -123,12 +125,12 @@ public final class BountyBoardClient {
             if (bounty.canCancel()) actions.add(Ui.button("Cancel", () -> sendBountyAction(bounty, false, true, false)).danger().small());
 
             List<UIComponent> content = new ArrayList<>();
-            content.add(Ui.row(Ui.heading(bounty.title()), Ui.spacer(), Ui.badge(bounty.status())).gap(5));
+            content.add(centeredRow(Ui.heading(bounty.title()), Ui.spacer(), Ui.badge(bounty.status())).gap(5));
             if (!bounty.subtitle().isBlank()) content.add(Ui.text(bounty.subtitle()));
             if (!bounty.description().isBlank()) content.add(Ui.text(bounty.description()));
             content.add(Ui.text("Reward: " + bounty.reward()));
             content.addAll(objectiveRows);
-            if (!actions.isEmpty()) content.add(Ui.row(actions.toArray(UIComponent[]::new)).gap(5));
+            if (!actions.isEmpty()) content.add(centeredRow(actions.toArray(UIComponent[]::new)).gap(5));
             return Ui.card(Ui.column(content.toArray(UIComponent[]::new)).gap(3)).padding(6);
         }
 
@@ -148,9 +150,9 @@ public final class BountyBoardClient {
                     field("Title", title, 210),
                     field("Description", description, 300),
                     field("Icon id", icon, 180),
-                    Ui.row(field("Reward", reward, 90), field("Lifetime min", lifetime, 90)).gap(8),
+                    centeredRow(field("Reward", reward, 90), field("Lifetime min", lifetime, 90)).gap(8),
                     Ui.divider(),
-                    Ui.row(Ui.heading("Objectives"), Ui.spacer(),
+                    centeredRow(Ui.heading("Objectives"), Ui.spacer(),
                             Ui.button("+ Objective", this::addObjectiveForm).small()).gap(6),
                     Ui.list(objectiveForms, this::objectiveRow).height(118),
                     Ui.text("Up to 16 objectives. Built-ins: deliver_item, deliver_fluid, kill_entity, craft_item, mine_block, visit_location"),
@@ -161,8 +163,8 @@ public final class BountyBoardClient {
                     field("Allowed groups (comma)", allowedGroups, 300),
                     field("Denied players (name/UUID, comma)", deniedPlayers, 300),
                     field("Progression group (optional)", progressionGroup, 220),
-                    Ui.row(field("Min level", minLevel, 80), field("Max level", maxLevel, 80)).gap(8),
-                    Ui.row(
+                    centeredRow(field("Min level", minLevel, 80), field("Max level", maxLevel, 80)).gap(8),
+                    centeredRow(
                             Ui.button("Back", () -> tab.set("Posted")).ghost(),
                             Ui.button("Create & fund", this::submitCreate).primary()
                     ).gap(8)
@@ -170,7 +172,7 @@ public final class BountyBoardClient {
         }
 
         private UIComponent objectiveRow(ObjectiveForm form) {
-            return Ui.row(
+            return centeredRow(
                     Ui.textField(form.type).placeholder("objective type").width(145),
                     Ui.textField(form.target).placeholder("target id").width(145),
                     Ui.textField(form.amount).placeholder("amount").width(65),
@@ -200,8 +202,16 @@ public final class BountyBoardClient {
             objectiveForms.set(List.copyOf(next));
         }
 
+        /**
+         * Center the cross-axis of every board row. OpenUI rows default to STRETCH:
+         * text labels otherwise render at the top of a taller input or button.
+         */
+        private static HStack centeredRow(UIComponent... children) {
+            return Ui.row(children).align(Alignment.CENTER);
+        }
+
         private UIComponent field(String label, Signal<String> value, int width) {
-            return Ui.row(Ui.text(label + ':'), Ui.textField(value).width(width)).gap(5);
+            return centeredRow(Ui.text(label + ':'), Ui.textField(value).width(width)).gap(5);
         }
 
         private void submitCreate() {
