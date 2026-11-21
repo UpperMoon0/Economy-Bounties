@@ -49,8 +49,20 @@ public record BoardSnapshot(
             List<ObjectiveEntry> objectives,
             boolean canAccept,
             boolean canCancel,
-            boolean canClaim
+            boolean canClaim,
+            String icon,
+            boolean ownedByPlayer
     ) {
+        /** Keep existing tests and addon constructors source-compatible. */
+        public BountyEntry(String id, String source, String title, String subtitle,
+                           String description, String reward, String status,
+                           long expiresAtEpochSecond, List<ObjectiveEntry> objectives,
+                           boolean canAccept, boolean canCancel, boolean canClaim) {
+            this(id, source, title, subtitle, description, reward, status,
+                    expiresAtEpochSecond, objectives, canAccept, canCancel, canClaim,
+                    "minecraft:paper", false);
+        }
+
         public BountyEntry {
             id = requireText(id, "id");
             source = requireText(source, "source");
@@ -59,6 +71,7 @@ public record BoardSnapshot(
             description = description == null ? "" : description;
             reward = reward == null ? "0" : reward;
             status = requireText(status, "status");
+            icon = icon == null || icon.isBlank() ? "minecraft:paper" : icon;
             objectives = List.copyOf(objectives == null ? List.of() : objectives);
         }
     }

@@ -320,7 +320,9 @@ public final class BountyBoardServer {
                 view.rewardAmount().toPlainString(), view.status().name(), view.expiresAt().getEpochSecond(), objectives,
                 view.status() == BountyStatus.OFFERED,
                 view.status() == BountyStatus.OFFERED || view.status() == BountyStatus.ACTIVE,
-                view.status() == BountyStatus.COMPLETED);
+                view.status() == BountyStatus.COMPLETED,
+                view.objectives().isEmpty() ? "minecraft:paper"
+                    : view.objectives().get(0).definition().target(), false);
     }
 
     private static BoardSnapshot.BountyEntry postedEntry(UUID playerId, PostedBountyView view) {
@@ -336,7 +338,8 @@ public final class BountyBoardServer {
                 view.description(), view.rewardAmount().toPlainString(), view.status().name(), view.expiresAt().getEpochSecond(), objectives,
                 view.status() == PostedBountyStatus.OPEN && !view.creatorId().equals(playerId),
                 view.status() == PostedBountyStatus.OPEN && view.creatorId().equals(playerId),
-                view.status() == PostedBountyStatus.COMPLETED && playerId.equals(view.claimantId()));
+                view.status() == PostedBountyStatus.COMPLETED && playerId.equals(view.claimantId()),
+                view.icon(), view.creatorId().equals(playerId));
     }
 
     private static boolean isDelivery(NamespacedId type) {

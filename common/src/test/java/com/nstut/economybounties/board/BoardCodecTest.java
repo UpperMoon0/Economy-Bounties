@@ -51,6 +51,18 @@ class BoardCodecTest {
     }
 
     @Test
+    void postedOwnershipAndItemIconSurviveSnapshotSerialization() {
+        BoardSnapshot.BountyEntry mine = new BoardSnapshot.BountyEntry(
+                "00000000-0000-0000-0000-000000000002", "posted", "Iron supplies",
+                "Creator test", "A sample contract", "200.00", "OPEN", 9000L,
+                List.of(), false, true, false, "minecraft:iron_ingot", true);
+        BoardSnapshot decoded = BoardCodec.decodeSnapshot(BoardCodec.encodeSnapshot(
+                new BoardSnapshot(List.of(), List.of(), List.of(mine), "", List.of())));
+        assertEquals("minecraft:iron_ingot", decoded.posted().get(0).icon());
+        assertTrue(decoded.posted().get(0).ownedByPlayer());
+    }
+
+    @Test
     void oneClickOrderIntentAndInventoryPreviewRoundTrip() {
         BoardRequest oneClick = BoardRequest.order(BoardRequest.Action.FULFILL_ORDER,
                 "economy_bounties:farm_orders", 2,
