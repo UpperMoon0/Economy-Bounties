@@ -206,19 +206,19 @@ public final class BountyBoardClient {
                     Ui.text("BOUNTIES").nowrap(),
                     Ui.divider(),
                     navButton("Orders", "Orders"),
-                    navButton("Contracts", "Generated"),
-                    navButton("Posted", "Posted"),
-                    navButton("Create", "Create")
+                    navButton("My Jobs", "Generated"),
+                    navButton(uiWidth() >= 410 ? "Player Jobs" : "Players", "Posted"),
+                    navButton("Post Job", "Create")
             ).gap(5)).width(side).height(height);
             UIComponent main = Ui.column(
                     centeredRow(
                             Ui.component(() -> {
                                 String current = tab.get();
                                 String heading = switch (current) {
-                                    case "Generated" -> "Contracts";
-                                    case "Posted" -> "Posted bounties";
-                                    case "Create" -> "Create bounty";
-                                    default -> "Orders";
+                                    case "Generated" -> "My Accepted Jobs";
+                                    case "Posted" -> "Player Bounties";
+                                    case "Create" -> "Post a Bounty";
+                                    default -> "Available Orders";
                                 };
                                 return List.of(Ui.node("active-tab-heading", current,
                                         () -> Ui.heading(heading)));
@@ -244,17 +244,10 @@ public final class BountyBoardClient {
             return Ui.component(() -> {
                 String selected = tab.get();
                 return List.of(Ui.node("nav", destination + selected, () -> {
-                    int color = destination.equals(selected) ? 0x76EDCB : 0xBDB9C4;
-                    String icon = switch (destination) {
-                        case "Orders" -> "1";
-                        case "Generated" -> "2";
-                        case "Posted" -> "3";
-                        default -> "+";
-                    };
-                    return Ui.card(centeredRow(
-                            Ui.icon(icon, color),
-                            Ui.text(caption).nowrap().ellipsis(true).flex()
-                    ).gap(4)).padding(4).elevated(false)
+                    // Text-only navigation: numbered prefixes suggest steps
+                    // where none exist and steal space from the actual labels.
+                    return Ui.card(Ui.text(caption).nowrap().ellipsis(true))
+                            .padding(5).elevated(false)
                             .selected(destination.equals(selected))
                             .onClick(() -> tab.set(destination));
                 }));
@@ -518,7 +511,7 @@ public final class BountyBoardClient {
                                 BoardRequest.Action.DISCARD_ORDER, order.board(), order.slot(),
                                 order.offerId()))).ghost().small());
             } else if ("TAKEN".equals(order.status())) {
-                actions.add(Ui.button("Contracts", () -> tab.set("Generated")).primary().small());
+                actions.add(Ui.button("My Jobs", () -> tab.set("Generated")).primary().small());
             }
             UIComponent footer = actions.isEmpty() ? Ui.text("Auto-restocking")
                     : centeredRow(actions.toArray(UIComponent[]::new))
@@ -541,7 +534,7 @@ public final class BountyBoardClient {
         private static String orderTime(BoardSnapshot.OrderEntry order) {
             long remaining = order.expiresAt() - Instant.now().getEpochSecond();
             if ("TAKEN".equals(order.status())) {
-                return "Accepted. Finish and claim it under Contracts.";
+                return "Accepted. Finish and claim it under My Jobs.";
             }
             if ("CLAIMED".equals(order.status())) {
                 return "Another player is fulfilling this order.";
@@ -577,7 +570,6 @@ public final class BountyBoardClient {
         }
 
         /** Accepted system orders only; players cannot mint new system offers. */
-        /** Contracts are tracking/claiming only; manual system rolls stay prohibited. */
         private UIComponent generatedPanel() {
             int panelHeight = bountyBrowserHeight();
             return Ui.column(
@@ -610,7 +602,7 @@ public final class BountyBoardClient {
                             .option("Expired", "Expired").width(75);
             return centeredRow(
                     Ui.textField(search).placeholder(postedTab
-                            ? "Search posted..." : "Search contracts...")
+                            ? "Search player bounties..." : "Search accepted jobs...")
                             .width(Math.max(87, mainWidth() - 268)),
                     statusFilter,
                     Ui.select(sort).option("Expiry", "Expiry").option("Reward", "Reward")
@@ -653,8 +645,10 @@ public final class BountyBoardClient {
                 String chosen = selectedId.get();
                 if (filteredItems.isEmpty()) return List.of(Ui.node("bounty-empty", "empty",
                         () -> Ui.card(Ui.column(
-                                Ui.heading("Nothing to show"),
-                                Ui.text("Try another status or search term.")
+                                Ui.heading(postedTab ? "No player bounties" : "No accepted jobs"),
+                                Ui.text(postedTab
+                                        ? "Players can post bounties here. Use Post Job to create one."
+                                        : "Accept an order from Orders to track it here.")
                         ).gap(5)).padding(7).height(height)));
                 BoardSnapshot.BountyEntry b = filteredItems.stream()
                         .filter(entry -> entry.id().equals(chosen))
