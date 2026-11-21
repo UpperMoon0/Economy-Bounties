@@ -47,7 +47,9 @@ if (needsWholeWorkspace || targetedProjects.isEmpty()) {
 selected.each { include it }
 
 def firstExisting = { List<String> candidates -> candidates.collect { file(it) }.find { new File(it, 'settings.gradle').isFile() } }
-def economyDir = firstExisting(['.deps/Economy', '../Economy'])
+// Prefer published Maven artifacts so routine builds verify the real addon API.
+def useLocalSourceDependencies = providers.gradleProperty('useLocalSources').map { it.toBoolean() }.getOrElse(false)
+def economyDir = useLocalSourceDependencies ? firstExisting(['.deps/Economy', '../Economy']) : null
 if (economyDir != null) {
     includeBuild(economyDir) {
         dependencySubstitution {
@@ -60,7 +62,7 @@ if (economyDir != null) {
     }
 }
 
-def openUiDir = firstExisting(['.deps/OpenUI-MC', '../OpenUI-MC'])
+def openUiDir = useLocalSourceDependencies ? firstExisting(['.deps/OpenUI-MC', '../OpenUI-MC']) : null
 if (openUiDir != null) {
     includeBuild(openUiDir) {
         dependencySubstitution {

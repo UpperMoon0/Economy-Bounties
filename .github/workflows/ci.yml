@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: UpperMoon0/OpenUI-MC
-          ref: 7ffd919c4d6b2b73583357d68f479cc8384c51c7
+          ref: 40bb62363c705bd18221ef02f0e3e5605777e28c
           path: upstream/OpenUI-MC
 
       - name: Set up Java 25
