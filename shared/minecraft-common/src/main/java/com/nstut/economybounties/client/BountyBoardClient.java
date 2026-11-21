@@ -547,7 +547,7 @@ public final class BountyBoardClient {
         }
 
         private UIComponent postedPanel() {
-            int panelHeight = Math.max(96, browserHeight() - 30);
+            int panelHeight = bountyBrowserHeight();
             return Ui.column(
                     bountyToolbar(true),
                     bountyBrowser(visiblePosted, postedRows,
