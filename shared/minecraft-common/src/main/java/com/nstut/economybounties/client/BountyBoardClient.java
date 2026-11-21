@@ -710,39 +710,158 @@ public final class BountyBoardClient {
         }
 
         private UIComponent createPanel() {
-            return Ui.scroll(Ui.column(
-                    Ui.heading("Create player bounty"),
-                    field("Title", title, 210),
-                    field("Description", description, 300),
-                    field("Icon id", icon, 180),
-                    centeredRow(field("Reward", reward, 90), field("Lifetime min", lifetime, 90)).gap(8),
-                    Ui.divider(),
-                    centeredRow(Ui.heading("Objectives"), Ui.spacer(),
-                            Ui.button("+ Objective", this::addObjectiveForm).small()).gap(6),
-                    Ui.list(objectiveForms, this::objectiveRow).height(118),
-                    Ui.text("Up to 16 objectives. Built-ins: deliver_item, deliver_fluid, kill_entity, craft_item, mine_block, visit_location"),
-                    Ui.divider(),
-                    Ui.heading("Audience"),
-                    Ui.checkbox("Public", publicAccess),
-                    field("Allowed players (name/UUID, comma)", allowedPlayers, 300),
-                    field("Allowed groups (comma)", allowedGroups, 300),
-                    field("Denied players (name/UUID, comma)", deniedPlayers, 300),
-                    field("Progression group (optional)", progressionGroup, 220),
-                    centeredRow(field("Min level", minLevel, 80), field("Max level", maxLevel, 80)).gap(8),
-                    centeredRow(
-                            Ui.button("Back", () -> tab.set("Posted")).ghost(),
-                            Ui.button("Create & fund", this::submitCreate).primary()
-                    ).gap(8)
+            int panelHeight = Math.max(110, mainHeight() - 47);
+            int availableWidth = Math.max(145, mainWidth() - 8);
+            int editorWidth = Math.max(94, (availableWidth * 55) / 100);
+            int previewWidth = Math.max(90, availableWidth - editorWidth - 6);
+            int inputWidth = Math.max(74, editorWidth - 22);
+
+            List<UIComponent> editor = new ArrayList<>();
+            editor.add(Ui.heading("Player-funded bounty"));
+            editor.add(verticalField("Title", title, inputWidth));
+            editor.add(verticalField("Description", description, inputWidth));
+            editor.add(verticalField("Icon ID", icon, inputWidth));
+            editor.add(centeredRow(
+                    verticalField("Reward ($)", reward, Math.max(43, inputWidth / 2 - 4)),
+                    verticalField("Lifetime (min)", lifetime, Math.max(43, inputWidth / 2 - 4))
+            ).gap(4));
+            editor.add(Ui.divider());
+            editor.add(centeredRow(Ui.heading("Objectives"), Ui.spacer(),
+                    Ui.button("+ Add", this::addObjectiveForm).small()).gap(3));
+            editor.add(Ui.list(objectiveForms, this::objectiveRow)
+                    .itemHeight(52).gap(4).height(132));
+            editor.add(Ui.text("Choose a type, target item/entity and quantity."));
+            editor.add(Ui.divider());
+            editor.add(Ui.button(advancedCreate.get() ? "▾ Audience & progression"
+                            : "▸ Audience & progression",
+                    () -> advancedCreate.set(!advancedCreate.get())).small());
+            editor.add(Ui.component(() -> {
+                boolean expanded = advancedCreate.get();
+                return List.of(Ui.node("advanced-create", String.valueOf(expanded), () ->
+                        expanded ? advancedAudienceForm(inputWidth)
+                                : Ui.text("Public by default; expand for restrictions.")));
+            }));
+
+            UIComponent form = Ui.card(
+                    Ui.scroll(Ui.column(editor.toArray(UIComponent[]::new)).gap(6))
+                            .height(panelHeight - 8)
+            ).padding(4).height(panelHeight).width(editorWidth);
+            UIComponent preview = Ui.component(() -> {
+                // Depend on each live field, so typing updates the preview.
+                String name = title.get(), desc = description.get(), item = icon.get(),
+                        payment = reward.get(), minutes = lifetime.get();
+                boolean isPublic = publicAccess.get();
+                List<ObjectiveForm> objectives = objectiveForms.get();
+                StringBuilder key = new StringBuilder(name).append('|').append(desc).append('|')
+                        .append(item).append('|').append(payment).append('|').append(minutes)
+                        .append('|').append(isPublic);
+                for (ObjectiveForm objective : objectives) key.append('|')
+                        .append(objective.type.get()).append(':').append(objective.target.get())
+                        .append(':').append(objective.amount.get());
+                return List.of(Ui.node("create-preview", key.toString(),
+                        () -> createPreview(panelHeight)));
+            }).height(panelHeight).width(previewWidth);
+
+            return availableWidth >= 215
+                    ? centeredRow(form, preview).gap(6)
+                    : Ui.scroll(Ui.column(form.height(170), preview.height(150)).gap(5))
+                            .height(panelHeight);
+        }
+
+        private UIComponent createPreview(int height) {
+            List<UIComponent> content = new ArrayList<>();
+            content.add(Ui.heading("Live preview"));
+            content.add(centeredRow(
+                    OrderItemIcons.icon(icon.get()).size(25),
+                    Ui.column(
+                            Ui.heading(title.get().isBlank() ? "Untitled bounty" : title.get())
+                                    .nowrap().ellipsis(true),
+                            Ui.text(publicAccess.get() ? "Public contract" : "Restricted audience")
+                                    .nowrap().ellipsis(true)
+                    ).gap(3).flex()
             ).gap(5));
+            if (!description.get().isBlank()) content.add(Ui.text(description.get()));
+            content.add(Ui.divider());
+            content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
+                    Ui.heading("$" + reward.get()), Ui.spacer()).gap(4));
+            content.add(Ui.text("Lifetime: " + lifetime.get() + " minutes"));
+            content.add(Ui.heading("Objectives"));
+            for (ObjectiveForm obj : objectiveForms.get()) {
+                content.add(Ui.card(Ui.column(
+                        Ui.text(readableItem(obj.type.get())).nowrap().ellipsis(true),
+                        centeredRow(OrderItemIcons.icon(obj.target.get()),
+                                Ui.text(obj.amount.get() + " " + readableItem(obj.target.get()))
+                                        .nowrap().ellipsis(true).flex()).gap(4)
+                ).gap(3)).padding(4));
+            }
+            content.add(Ui.text("The server verifies payout funding and permissions on submission."));
+            return Ui.card(Ui.column(
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
+                            .height(Math.max(70, height - 38)),
+                    Ui.divider(),
+                    centeredRow(
+                            Ui.button("Back", () -> tab.set("Posted")).ghost().small(),
+                            Ui.button("Preview", this::validateCreateDraft).small(),
+                            Ui.button("Create & fund", this::submitCreate).primary().small()
+                    ).gap(3)
+            ).gap(4)).padding(4).height(height);
+        }
+
+        private UIComponent advancedAudienceForm(int width) {
+            return Ui.column(
+                    Ui.checkbox("Public", publicAccess),
+                    verticalField("Allowed players (names/UUID)", allowedPlayers, width),
+                    verticalField("Allowed groups", allowedGroups, width),
+                    verticalField("Denied players", deniedPlayers, width),
+                    verticalField("Progression group", progressionGroup, width),
+                    centeredRow(
+                            verticalField("Min lvl", minLevel, Math.max(44, width / 2 - 4)),
+                            verticalField("Max lvl", maxLevel, Math.max(44, width / 2 - 4))
+                    ).gap(3)
+            ).gap(5);
+        }
+
+        private UIComponent verticalField(String label, Signal<String> value, int width) {
+            return Ui.column(Ui.text(label).nowrap().ellipsis(true),
+                    Ui.textField(value).width(width)).gap(3);
         }
 
         private UIComponent objectiveRow(ObjectiveForm form) {
-            return centeredRow(
-                    Ui.textField(form.type).placeholder("objective type").width(145),
-                    Ui.textField(form.target).placeholder("target id").width(145),
-                    Ui.textField(form.amount).placeholder("amount").width(65),
-                    Ui.button("×", () -> removeObjectiveForm(form)).danger().small()
-            ).gap(4);
+            int half = Math.max(49, (Math.max(96, (mainWidth() * 55) / 100) - 28) / 2);
+            return Ui.card(Ui.column(
+                    centeredRow(
+                            Ui.select(form.type).option("Deliver item", "economy_bounties:deliver_item")
+                                    .option("Deliver fluid", "economy_bounties:deliver_fluid")
+                                    .option("Kill entity", "economy_bounties:kill_entity")
+                                    .option("Craft item", "economy_bounties:craft_item")
+                                    .option("Mine block", "economy_bounties:mine_block")
+                                    .option("Visit location", "economy_bounties:visit_location")
+                                    .width(Math.max(82, half + 20)),
+                            Ui.spacer(),
+                            Ui.button("×", () -> removeObjectiveForm(form)).danger().small()
+                    ).gap(3),
+                    centeredRow(
+                            Ui.textField(form.target).placeholder("target ID").width(Math.max(70, half + 17)),
+                            Ui.textField(form.amount).placeholder("qty").numeric().width(43)
+                    ).gap(3)
+            ).gap(2)).padding(3);
+        }
+
+        private void validateCreateDraft() {
+            if (title.get().isBlank()) { notice.set("Enter a title before creating"); return; }
+            if (moneyValue(reward.get()).signum() <= 0) {
+                notice.set("Reward must be greater than zero"); return;
+            }
+            if (parseLong(lifetime.get(), 0) <= 0) {
+                notice.set("Lifetime must be at least one minute"); return;
+            }
+            for (ObjectiveForm objective : objectiveForms.get()) {
+                if (objective.type.get().isBlank() || objective.target.get().isBlank()
+                        || parseLong(objective.amount.get(), 0) <= 0) {
+                    notice.set("Every objective needs a type, target and quantity"); return;
+                }
+            }
+            notice.set("Preview valid. Server will verify funds and audience on creation.");
         }
 
         private void addObjectiveForm() {
