@@ -166,7 +166,7 @@ public final class BountyBoardClient {
             }
             return Ui.column(
                     centeredRow(Ui.heading("Dispatch board"), Ui.spacer(),
-                            Ui.badge("AUTO", Badge.Variant.NEUTRAL)),
+                            Ui.badge(Component.literal("AUTO"), Badge.Variant.NEUTRAL)),
                     Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
                             .tab("Town", "Town").tab("Special", "Special"),
                     body
@@ -242,8 +242,8 @@ public final class BountyBoardClient {
                     ).gap(3).flex()
             ).gap(8));
             content.add(centeredRow(
-                    Ui.badge(scope, Badge.Variant.NEUTRAL),
-                    Ui.badge(compactRarity(order.rarity()), rarityColor(order.rarity()))
+                    Ui.badge(Component.literal(scope), Badge.Variant.NEUTRAL),
+                    Ui.badge(Component.literal(compactRarity(order.rarity())), rarityColor(order.rarity()))
             ).gap(4));
 
             if (order.canAccept()) {
@@ -252,7 +252,7 @@ public final class BountyBoardClient {
                         OrderItemIcons.icon(order.item()),
                         Ui.heading("Need " + order.quantity()),
                         Ui.spacer(),
-                        Ui.badge(Math.min(order.inInventory(), order.quantity()) + "/" + order.quantity(),
+                        Ui.badge(Component.literal(Math.min(order.inInventory(), order.quantity()) + "/" + order.quantity()),
                                 order.inInventory() >= order.quantity()
                                         ? Badge.Variant.SUCCESS : Badge.Variant.NEUTRAL)
                 ).gap(5));
@@ -267,7 +267,7 @@ public final class BountyBoardClient {
                         Ui.icon("$", 0x67DDAC),
                         Ui.heading("$" + order.reward()),
                         Ui.spacer(),
-                        Ui.badge("REWARD", Badge.Variant.SUCCESS)
+                        Ui.badge(Component.literal("REWARD"), Badge.Variant.SUCCESS)
                 ).gap(5));
             } else {
                 content.add(Ui.text(switch (order.status()) {
