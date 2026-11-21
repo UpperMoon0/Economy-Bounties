@@ -34,7 +34,7 @@ public final class BountyDataReloadListener extends SimplePreparableReloadListen
         BountyPoolJsonCodec poolCodec = new BountyPoolJsonCodec();
         Map<NamespacedId, BountyDefinition> definitions = new LinkedHashMap<>();
         Map<NamespacedId, BountyPoolDefinition> pools = new LinkedHashMap<>();
-        manager.listResources("economy_bounties/bounties", id -> id.getPath().endsWith(".json"))
+        manager.listResources("bounties", id -> id.getPath().endsWith(".json"))
                 .forEach((id, resource) -> {
                     try (Reader reader = resource.openAsReader()) {
                         BountyDefinition value = bountyCodec.decode(reader);
@@ -43,7 +43,7 @@ public final class BountyDataReloadListener extends SimplePreparableReloadListen
                         throw new IllegalStateException("Failed to read " + id, error);
                     }
                 });
-        manager.listResources("economy_bounties/bounty_pools", id -> id.getPath().endsWith(".json"))
+        manager.listResources("bounty_pools", id -> id.getPath().endsWith(".json"))
                 .forEach((id, resource) -> {
                     try (Reader reader = resource.openAsReader()) {
                         BountyPoolDefinition value = poolCodec.decode(reader);
@@ -57,6 +57,9 @@ public final class BountyDataReloadListener extends SimplePreparableReloadListen
 
     @Override protected void apply(Loaded loaded, ResourceManager manager, ProfilerFiller profiler) {
         EconomyBountiesRuntime.replaceData(loaded.definitions(), loaded.pools());
+        System.getLogger(BountyDataReloadListener.class.getName()).log(System.Logger.Level.INFO,
+                "Loaded " + loaded.definitions().size() + " Economy Bounties definitions and "
+                        + loaded.pools().size() + " bounty pools");
     }
 
     public record Loaded(List<BountyDefinition> definitions, Map<NamespacedId, BountyPoolDefinition> pools) { }

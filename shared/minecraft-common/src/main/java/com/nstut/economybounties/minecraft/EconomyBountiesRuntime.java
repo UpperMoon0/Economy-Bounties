@@ -36,6 +36,7 @@ public final class EconomyBountiesRuntime {
     public static synchronized void init() {
         if (initialized) return;
         initialized = true;
+        BountyBoardRegistries.init();
         BuiltinObjectiveTypes.registerAll(OBJECTIVES);
         BountyNetwork.registerCommon();
         BountyBoardCommands.register();
