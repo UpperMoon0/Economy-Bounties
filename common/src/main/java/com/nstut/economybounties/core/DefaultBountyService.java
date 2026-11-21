@@ -123,6 +123,43 @@ public final class DefaultBountyService implements BountyService {
         return createOffer(playerState, playerId, definition, context, seed, random, expired);
     }
 
+    /**
+     * Issue exactly the server-selected automatic order. Quantity, reward, and UUID
+     * are sealed by the server's persisted slot, not by a client request.
+     * This operation is idempotent when a crashed slot grant is replayed.
+     */
+    public synchronized BountyView grant(UUID playerId, UUID instanceId, BountyDefinition definition,
+                                          Instant now, Instant expiresAt) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(instanceId, "instanceId");
+        Objects.requireNonNull(definition, "definition");
+        Objects.requireNonNull(now, "now");
+        Objects.requireNonNull(expiresAt, "expiresAt");
+        if (!expiresAt.isAfter(now)) throw new IllegalArgumentException("Order deadline already passed");
+        PlayerBountyState state = state(playerId);
+        BountyInstanceState existing = state.instances().get(instanceId);
+        if (existing != null) {
+            if (!existing.playerId().equals(playerId) || !existing.definition().id().equals(definition.id()))
+                throw new IllegalStateException("Order grant identity collision");
+            return existing.view();
+        }
+        List<BountyInstanceState.ObjectiveState> objectives = new ArrayList<>();
+        for (ObjectiveDefinition objective : definition.objectives()) {
+            objectiveRegistry.validate(objective);
+            if (objective.amount().min() != objective.amount().max())
+                throw new IllegalArgumentException("Granted orders must have fixed quantities");
+            objectives.add(new BountyInstanceState.ObjectiveState(objective, objective.amount().min()));
+        }
+        if (definition.reward().currency().min().compareTo(definition.reward().currency().max()) != 0)
+            throw new IllegalArgumentException("Granted orders must have a fixed reward");
+        BountyInstanceState instance = new BountyInstanceState(instanceId, playerId, definition,
+                now, expiresAt, definition.reward().currency().min(), objectives, 0);
+        instance.accept(now);
+        state.instances().put(instanceId, instance);
+        save(state);
+        return instance.view();
+    }
+
     @Override
     public synchronized Optional<BountyView> accept(UUID playerId, UUID instanceId, Instant now) {
         Objects.requireNonNull(playerId, "playerId");
