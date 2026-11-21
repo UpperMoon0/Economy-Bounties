@@ -74,7 +74,8 @@ public final class BountyDataReloadListener extends SimplePreparableReloadListen
         EconomyBountiesRuntime.replaceData(loaded.definitions(), loaded.pools(), loaded.boards());
         System.getLogger(BountyDataReloadListener.class.getName()).log(System.Logger.Level.INFO,
                 "Loaded " + loaded.definitions().size() + " Economy Bounties definitions and "
-                        + loaded.pools().size() + " bounty pools");
+                        + loaded.pools().size() + " bounty pools and "
+                        + loaded.boards().size() + " automatic order boards");
     }
 
     public record Loaded(List<BountyDefinition> definitions, Map<NamespacedId, BountyPoolDefinition> pools,
