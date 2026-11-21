@@ -360,13 +360,12 @@ public final class BountyBoardClient {
             }
         }
 
+        /** Accepted system orders only; players cannot mint new system offers. */
         private UIComponent generatedPanel() {
             return Ui.column(
-                    Ui.heading("Pools"),
-                    Ui.list(pools, pool -> Ui.button("Roll " + pool.id(), () ->
-                            BountyNetwork.sendRequest(BoardRequest.roll(pool.id()))).small()).height(54),
-                    Ui.heading("Your bounties"),
-                    Ui.list(generated, this::bountyCard).itemHeight(156).gap(5).height(180)
+                    Ui.heading("Your contracts"),
+                    Ui.list(generated, this::bountyCard).itemHeight(156).gap(5)
+                            .height(Math.max(130, uiHeight() - 108))
             ).gap(5);
         }
 

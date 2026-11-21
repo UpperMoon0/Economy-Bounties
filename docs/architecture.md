@@ -12,7 +12,7 @@ The common engine is pure Java and has no Minecraft or Economy implementation de
 
 ## Server-authoritative bounty board
 
-`/bounties` opens an OpenUI screen from a server-produced `BoardSnapshot`. The protocol is deliberately small: the client sends `BoardRequest` intent such as refresh, roll, accept, cancel, claim, create or deliver. The packet context supplies the acting player; player UUIDs, progress values and payment results are never accepted from the client.
+`/bounties` opens an OpenUI screen from a server-produced `BoardSnapshot`. The protocol is deliberately small: the client sends `BoardRequest` intent such as refresh, accept, cancel, claim, create or deliver. Legacy `ROLL` requests remain recognizable for protocol compatibility but are rejected by `BoardActionPolicy` before any generation can occur. The packet context supplies the acting player; player UUIDs, progress values and payment results are never accepted from the client.
 
 Before mutation, `BountyBoardServer` re-resolves the referenced contract and validates state, ownership/claimant, audience and request bounds. Posted-bounty forms also have objective/audience/outstanding-contract/lifetime limits. Board JSON payloads are size-bounded before parsing.
 

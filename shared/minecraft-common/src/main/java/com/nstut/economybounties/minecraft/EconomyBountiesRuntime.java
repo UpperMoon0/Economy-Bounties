@@ -10,7 +10,6 @@ import com.nstut.economybounties.orders.OrderBoardDefinition;
 import com.nstut.economybounties.orders.OrderBoardService;
 import dev.architectury.event.events.common.LifecycleEvent;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
@@ -19,7 +18,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /** Shared server runtime for the 1.20.1 and 1.21.1 loader families. */
@@ -89,7 +87,6 @@ public final class EconomyBountiesRuntime {
     public static BountyService generated() { return require(generated, "generated bounty service"); }
     public static PostedBountyService posted() { return require(posted, "posted bounty service"); }
     public static ObjectiveRegistry objectives() { return OBJECTIVES; }
-    public static Map<NamespacedId, BountyPoolDefinition> pools() { return pools; }
     public static OrderBoardService orders() { return require(orders, "automatic order board service"); }
 
     public static List<OrderBoardService.Card> ordersFor(UUID playerId, int level, Instant now) {
@@ -108,17 +105,6 @@ public final class EconomyBountiesRuntime {
         Instant now = Instant.now();
         generated.recordProgress(event, now);
         posted.recordProgress(event, now);
-    }
-
-    public static Optional<BountyView> roll(ServerPlayer player, NamespacedId poolId) {
-        if (!ready()) return Optional.empty();
-        BountyPoolDefinition pool = pools.get(poolId);
-        if (pool == null) return Optional.empty();
-        Instant now = Instant.now();
-        int ordinal = Math.toIntExact(Math.min(Integer.MAX_VALUE, generated.list(player.getUUID(), now).size()));
-        long epoch = Math.floorDiv(now.getEpochSecond(), 86_400L);
-        return generated.rollOffer(player.getUUID(), pool,
-                new BountyService.RollContext(server.overworld().getSeed(), epoch, ordinal, now));
     }
 
     private static <T> T require(T value, String name) {

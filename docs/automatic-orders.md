@@ -1,6 +1,6 @@
 # Automatic Orders — implementation and datapack guide
 
-Automatic Orders are separate from manually rolled **Generated** contracts and player-funded **Posted** contracts. A server maintains the rotating board slots; the player only selects an offered order. Accepting creates a normal generated bounty with the existing item-consumption, progress, Economy payout and idempotent claim flow.
+Automatic Orders replace player-initiated system bounty rolling. Accepted automatic orders appear in **Contracts**, while player-funded **Posted** contracts remain separate. A server maintains the rotating board slots; the player only selects an offered order. Accepting creates a normal generated bounty with the existing item-consumption, progress, Economy payout and idempotent claim flow.
 
 ## Player experience
 

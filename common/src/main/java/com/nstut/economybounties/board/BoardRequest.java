@@ -36,6 +36,8 @@ public record BoardRequest(
         ACCEPT_ORDER,
         FULFILL_ORDER,
         DISCARD_ORDER,
+        /** Legacy protocol value; server denies player-triggered generation. */
+        @Deprecated
         ROLL,
         ACCEPT_GENERATED,
         CANCEL_GENERATED,
@@ -111,10 +113,6 @@ public record BoardRequest(
                 && action != Action.DISCARD_ORDER)
             throw new IllegalArgumentException("Not an order action");
         return new BoardRequest(action, offerId, "", boardId, "", "", slot, null);
-    }
-
-    public static BoardRequest roll(String poolId) {
-        return new BoardRequest(Action.ROLL, "", "", poolId, "", "", -1, null);
     }
 
     public static BoardRequest deliver(String source, String bountyId, int objectiveIndex, String type, String target) {

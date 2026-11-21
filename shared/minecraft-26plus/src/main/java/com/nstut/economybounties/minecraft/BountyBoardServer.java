@@ -2,6 +2,7 @@ package com.nstut.economybounties.minecraft;
 
 import com.nstut.economybounties.api.*;
 import com.nstut.economybounties.board.BoardRequest;
+import com.nstut.economybounties.board.BoardActionPolicy;
 import com.nstut.economybounties.board.BoardSnapshot;
 import com.nstut.economybounties.network.BountyNetwork;
 import com.nstut.economybounties.orders.OrderBoardService;
@@ -25,7 +26,6 @@ import java.util.stream.IntStream;
 public final class BountyBoardServer {
     private static final int MAX_CREATE_OBJECTIVES = 16;
     private static final int MAX_AUDIENCE_ENTRIES = 128;
-    private static final int MAX_OUTSTANDING_GENERATED = 32;
     private static final int MAX_OUTSTANDING_POSTED_BY_PLAYER = 64;
     private static final long MAX_LIFETIME_MINUTES = 60L * 24L * 30L;
 
@@ -39,6 +39,12 @@ public final class BountyBoardServer {
             send(player, "Economy Bounties is still starting");
             return;
         }
+        // Legacy clients can still encode ROLL. Do not trust the absence
+        // of its UI button: deny the request at the authoritative entry point.
+        if (!BoardActionPolicy.allowFromPlayer(request.action())) {
+            send(player, BoardActionPolicy.manualRollNotice());
+            return;
+        }
         String notice;
         try {
             notice = switch (request.action()) {
@@ -46,7 +52,7 @@ public final class BountyBoardServer {
                 case ACCEPT_ORDER -> acceptOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
                 case FULFILL_ORDER -> fulfillOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
                 case DISCARD_ORDER -> discardOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
-                case ROLL -> roll(player, request.poolId());
+                case ROLL -> BoardActionPolicy.manualRollNotice();
                 case ACCEPT_GENERATED -> generatedAccept(player, request.bountyId());
                 case CANCEL_GENERATED -> generatedCancel(player, request.bountyId());
                 case CLAIM_GENERATED -> generatedClaim(player, request.bountyId());
@@ -71,8 +77,9 @@ public final class BountyBoardServer {
 
     public static BoardSnapshot snapshot(ServerPlayer player, String notice) {
         Instant now = Instant.now();
-        List<BoardSnapshot.PoolEntry> pools = EconomyBountiesRuntime.pools().keySet().stream()
-                .map(NamespacedId::toString).sorted().map(BoardSnapshot.PoolEntry::new).toList();
+        // Legacy snapshot field remains for wire compatibility; there are no
+        // player-rollable pools. Auto-generated offers live in orders instead.
+        List<BoardSnapshot.PoolEntry> pools = List.of();
         List<BoardSnapshot.BountyEntry> generated = EconomyBountiesRuntime.generatedFor(player.getUUID(), now).stream()
                 .sorted(Comparator.comparingInt((BountyView view) -> terminalGenerated(view.status()) ? 1 : 0)
                         .thenComparing(BountyView::offeredAt, Comparator.reverseOrder()))
@@ -174,20 +181,6 @@ public final class BountyBoardServer {
                 MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID()),
                 NamespacedId.parse(required(board, "order board")), slot,
                 uuid(offerId), Instant.now());
-    }
-
-    private static String roll(ServerPlayer player, String poolId) {
-        long outstanding = EconomyBountiesRuntime.generatedFor(player.getUUID(), Instant.now()).stream()
-                .filter(view -> view.status() == BountyStatus.OFFERED || view.status() == BountyStatus.ACTIVE || view.status() == BountyStatus.COMPLETED)
-                .count();
-        if (outstanding >= MAX_OUTSTANDING_GENERATED) {
-            return "Finish, claim, cancel, or let existing bounties expire before rolling more";
-        }
-        NamespacedId id = NamespacedId.parse(required(poolId, "pool id"));
-        if (!EconomyBountiesRuntime.pools().containsKey(id)) return "Unknown bounty pool: " + id;
-        return EconomyBountiesRuntime.roll(player, id).isPresent()
-                ? "New bounty offer generated"
-                : "No eligible bounty is available from this pool";
     }
 
     private static String generatedAccept(ServerPlayer player, String id) {
