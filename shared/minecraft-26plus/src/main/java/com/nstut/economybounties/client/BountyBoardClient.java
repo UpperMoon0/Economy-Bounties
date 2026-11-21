@@ -18,7 +18,9 @@ import net.minecraft.network.chat.Component;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /** Client-only OpenUI board. It displays server snapshots and sends intent packets only. */
 public final class BountyBoardClient {
@@ -35,14 +37,47 @@ public final class BountyBoardClient {
 
         private final Signal<String> tab = Signals.of("Orders");
         private final Signal<List<BoardSnapshot.OrderEntry>> orders = Signals.of(List.of());
-        private final Signal<String> orderFilter = Signals.of("All");
-        private final Computed<List<BoardSnapshot.OrderEntry>> visibleOrders = Signals.computed(() ->
-                orders.get().stream().filter(order -> switch (orderFilter.get()) {
-                    case "Personal" -> "PERSONAL".equals(order.scope());
-                    case "Town" -> "SHARED".equals(order.scope());
-                    case "Special" -> order.board().contains("daily_") || order.board().contains("festival");
-                    default -> true;
-                }).toList());
+
+        private final Signal<String> orderSearch = Signals.of("");
+        private final Signal<String> orderScope = Signals.of("All");
+        private final Signal<String> orderType = Signals.of("All");
+        private final Signal<String> orderStatus = Signals.of("All");
+        private final Signal<String> orderSort = Signals.of("Ready");
+        private final Signal<String> orderView = Signals.of("Grid");
+        private final Signal<Boolean> readyOnly = Signals.of(false);
+        private final Computed<List<BoardSnapshot.OrderEntry>> visibleOrders = Signals.computed(() -> {
+            String query = orderSearch.get().trim().toLowerCase(Locale.ROOT);
+            String scope = orderScope.get(), type = orderType.get(), status = orderStatus.get();
+            String sort = orderSort.get();
+            boolean onlyReady = readyOnly.get();
+            Comparator<BoardSnapshot.OrderEntry> comparer = switch (sort) {
+                case "Reward" -> Comparator.comparing(
+                        (BoardSnapshot.OrderEntry o) -> moneyValue(o.reward())).reversed();
+                case "Time" -> Comparator.comparingLong(BoardSnapshot.OrderEntry::expiresAt);
+                case "Item" -> Comparator.comparing(o -> readableItem(o.item()).toLowerCase(Locale.ROOT));
+                default -> Comparator.comparingInt((BoardSnapshot.OrderEntry o) -> isReady(o) ? 0 : 1)
+                        .thenComparing(Comparator.comparing(
+                                (BoardSnapshot.OrderEntry o) -> moneyValue(o.reward())).reversed());
+            };
+            return orders.get().stream()
+                    .filter(o -> scope.equals("All")
+                            || scope.equals("Personal") && "PERSONAL".equals(o.scope())
+                            || scope.equals("Global") && "SHARED".equals(o.scope()))
+                    .filter(o -> type.equals("All") || (type.equals("Special") == isSpecial(o)))
+                    .filter(o -> switch (status) {
+                        case "Ready" -> isReady(o);
+                        case "Available" -> o.canAccept();
+                        case "Taken" -> "TAKEN".equals(o.status()) || "CLAIMED".equals(o.status());
+                        case "Restocking" -> "RESTOCKING".equals(o.status());
+                        default -> true;
+                    })
+                    .filter(o -> !onlyReady || isReady(o))
+                    .filter(o -> query.isEmpty()
+                            || (o.title() + " " + o.item() + " " + o.rarity() + " " + o.board())
+                                    .toLowerCase(Locale.ROOT).contains(query))
+                    .sorted(comparer)
+                    .toList();
+        });
         private final Signal<String> selectedOrderKey = Signals.of("");
         private final Computed<List<BoardSnapshot.OrderEntry>> selectedOrder = Signals.computed(() -> {
             List<BoardSnapshot.OrderEntry> choices = visibleOrders.get();
@@ -62,6 +97,35 @@ public final class BountyBoardClient {
         private final Signal<List<BoardSnapshot.PoolEntry>> pools = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> generated = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> posted = Signals.of(List.of());
+        private final Signal<String> contractSearch = Signals.of("");
+        private final Signal<String> contractStatus = Signals.of("All");
+        private final Signal<String> contractSort = Signals.of("Expiry");
+        private final Signal<String> contractView = Signals.of("List");
+        private final Signal<String> contractSelection = Signals.of("");
+        private final Signal<String> postedSearch = Signals.of("");
+        private final Signal<String> postedStatus = Signals.of("All");
+        private final Signal<String> postedSort = Signals.of("Expiry");
+        private final Signal<String> postedView = Signals.of("List");
+        private final Signal<String> postedSelection = Signals.of("");
+        private final Signal<Boolean> advancedCreate = Signals.of(false);
+
+        private final Computed<List<BoardSnapshot.BountyEntry>> visibleContracts =
+                Signals.computed(() -> filterBounties(generated.get(), contractSearch.get(),
+                        contractStatus.get(), contractSort.get(), false));
+        private final Computed<List<BoardSnapshot.BountyEntry>> visiblePosted =
+                Signals.computed(() -> filterBounties(posted.get(), postedSearch.get(),
+                        postedStatus.get(), postedSort.get(), true));
+        private record BountyRow(BoardSnapshot.BountyEntry bounty, boolean selected) { }
+        private final Computed<List<BountyRow>> contractRows = Signals.computed(() -> {
+            String selected = contractSelection.get();
+            return visibleContracts.get().stream()
+                    .map(b -> new BountyRow(b, b.id().equals(selected))).toList();
+        });
+        private final Computed<List<BountyRow>> postedRows = Signals.computed(() -> {
+            String selected = postedSelection.get();
+            return visiblePosted.get().stream()
+                    .map(b -> new BountyRow(b, b.id().equals(selected))).toList();
+        });
         private final Signal<String> notice = Signals.of("");
 
         private final Signal<String> title = Signals.of("");
@@ -95,31 +159,108 @@ public final class BountyBoardClient {
             });
         }
 
-        @Override protected int uiLeft() { return Math.max(8, (width - uiWidth()) / 2); }
-        @Override protected int uiTop() { return Math.max(8, (height - uiHeight()) / 2); }
-        @Override protected int uiWidth() { return Math.min(540, Math.max(120, width - 16)); }
-        @Override protected int uiHeight() { return Math.min(344, Math.max(100, height - 16)); }
+        @Override protected int uiLeft() { return Math.max(6, (width - uiWidth()) / 2); }
+        @Override protected int uiTop() { return Math.max(6, (height - uiHeight()) / 2); }
+        @Override protected int uiWidth() { return Math.min(660, Math.max(145, width - 12)); }
+        @Override protected int uiHeight() { return Math.min(390, Math.max(130, height - 12)); }
 
-        @Override
-        protected UIComponent buildUI() {
-            return Ui.card(Ui.column(
-                    centeredRow(
-                            Ui.title("Bounty Board"),
-                            Ui.spacer(),
+        private int sideWidth() { return uiWidth() >= 410 ? 84 : 62; }
+        private int mainWidth() { return Math.max(130, uiWidth() - sideWidth() - 26); }
+        private int mainHeight() { return Math.max(110, uiHeight() - 21); }
+        private int browserHeight() { return Math.max(92, mainHeight() - 91); }
+
+        @Override protected UIComponent buildUI() {
+            int side = sideWidth(), contentWidth = mainWidth(), height = mainHeight();
+            UIComponent sidebar = Ui.scroll(Ui.column(
+                    Ui.text("BOUNTY").nowrap(),
+                    Ui.text("BOARD").nowrap(),
+                    Ui.divider(),
+                    navButton("Orders", "Orders"),
+                    navButton("Contracts", "Generated"),
+                    navButton("Posted", "Posted"),
+                    navButton("Create", "Create")
+            ).gap(5)).width(side).height(height);
+            UIComponent main = Ui.column(
+                    centeredRow(Ui.heading("Bounty Board"), Ui.spacer(),
                             Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small(),
-                            Ui.button("Close", this::onClose).ghost().small()
-                    ).gap(6),
-                    Ui.text(notice),
-                    Ui.tabs(tab).tab("Orders", "Orders").tab("Generated", "Contracts")
-                            .tab("Posted", "Posted").tab("Create", "Create"),
+                            Ui.button("X", this::onClose).ghost().small()).gap(4),
+                    Ui.text(notice).height(11),
                     Ui.switcher(tab)
                             .when("Orders", this::ordersPanel)
                             .when("Generated", this::generatedPanel)
                             .when("Posted", this::postedPanel)
                             .when("Create", this::createPanel)
-            ).gap(7)).padding(10).elevated(true);
+            ).gap(5).width(contentWidth).height(height);
+            return Ui.card(centeredRow(sidebar, main).gap(7))
+                    .padding(7).height(uiHeight()).elevated(true);
         }
 
+        /** Reactive, narrow, independently scrollable Economy-style navigation. */
+        private UIComponent navButton(String caption, String destination) {
+            return Ui.component(() -> {
+                String selected = tab.get();
+                return List.of(Ui.node("nav", destination + selected, () -> {
+                    var button = Ui.button(caption, () -> tab.set(destination)).small();
+                    return destination.equals(selected) ? button.primary() : button.ghost();
+                }));
+            }).width(sideWidth() - 7).height(27);
+        }
+
+        private static java.math.BigDecimal moneyValue(String amount) {
+            try { return new java.math.BigDecimal(amount); }
+            catch (NumberFormatException error) { return java.math.BigDecimal.ZERO; }
+        }
+        private static boolean isSpecial(BoardSnapshot.OrderEntry order) {
+            String board = order.board().toLowerCase(Locale.ROOT);
+            return board.contains("daily") || board.contains("festival") || board.contains("event");
+        }
+        private static boolean isReady(BoardSnapshot.OrderEntry order) {
+            return order.canAccept() && order.inInventory() >= order.quantity();
+        }
+
+        private static List<BoardSnapshot.BountyEntry> filterBounties(
+                List<BoardSnapshot.BountyEntry> items, String search, String status,
+                String sort, boolean postedTab) {
+            String query = search == null ? "" : search.strip().toLowerCase(Locale.ROOT);
+            Comparator<BoardSnapshot.BountyEntry> comparator = switch (sort) {
+                case "Reward" -> Comparator.comparing(
+                        (BoardSnapshot.BountyEntry b) -> moneyValue(b.reward())).reversed();
+                case "Progress" -> Comparator.comparingDouble(
+                        (BoardSnapshot.BountyEntry b) -> bountyProgress(b)).reversed();
+                default -> Comparator.comparingLong(BoardSnapshot.BountyEntry::expiresAtEpochSecond);
+            };
+            return items.stream().filter(b -> query.isEmpty()
+                    || (b.title() + " " + b.subtitle() + " " + b.description()
+                        + " " + b.objectives().stream().map(BoardSnapshot.ObjectiveEntry::target)
+                                .reduce("", (a, c) -> a + " " + c))
+                            .toLowerCase(Locale.ROOT).contains(query))
+                    .filter(b -> switch (status) {
+                        case "Active" -> b.status().equals("ACTIVE");
+                        case "Claimable" -> b.canClaim();
+                        case "Completed" -> b.status().equals("COMPLETED");
+                        case "Expired" -> b.status().equals("EXPIRED");
+                        case "Open" -> b.status().equals("OPEN") || b.status().equals("OFFERED");
+                        case "Mine" -> postedTab && b.ownedByPlayer();
+                        default -> true;
+                    })
+                    .sorted(comparator).toList();
+        }
+
+        private static double bountyProgress(BoardSnapshot.BountyEntry b) {
+            long need = 0, made = 0;
+            for (BoardSnapshot.ObjectiveEntry objective : b.objectives()) {
+                need += objective.targetAmount();
+                made += Math.min(objective.targetAmount(), objective.progress());
+            }
+            return need <= 0 ? 0 : made / (double) need;
+        }
+
+        private static String bountyIcon(BoardSnapshot.BountyEntry b) {
+            if (b.icon() != null && !b.icon().isBlank()
+                    && !b.icon().equals("minecraft:paper")) return b.icon();
+            return b.objectives().isEmpty() ? "minecraft:paper"
+                    : b.objectives().get(0).target();
+        }
         /**
          * Automatic orders are a curated, server-owned storefront. No manual Roll
          * button is needed. A slot is locked on acceptance before a bounty grant.
