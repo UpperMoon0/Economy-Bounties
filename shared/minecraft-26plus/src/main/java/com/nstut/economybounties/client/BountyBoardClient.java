@@ -266,84 +266,103 @@ public final class BountyBoardClient {
          * button is needed. A slot is locked on acceptance before a bounty grant.
          */
         private UIComponent ordersPanel() {
-            int panelHeight = Math.max(112, uiHeight() - 145);
-            int contentWidth = Math.max(120, uiWidth() - 26);
-            int listWidth = Math.max(112, (contentWidth * 40) / 100);
-            int detailWidth = Math.max(120, contentWidth - listWidth - 6);
+            int panelHeight = Math.max(92, browserHeight() - 49);
+            int availableWidth = Math.max(145, mainWidth() - 10);
+            int listWidth = Math.max(80, (availableWidth * 54) / 100);
+            int detailWidth = Math.max(82, availableWidth - listWidth - 6);
 
-            // VirtualList items are intentionally single-row. Detail content is
-            // NOT a VirtualList: the old one-item virtual list swallowed wheel
-            // events and clipped taller panels instead of scrolling them.
-            UIComponent list = Ui.list(orderRows, this::orderListRow)
-                    .key(row -> orderKey(row.order()))
-                    .itemHeight(38).gap(4).height(panelHeight).width(listWidth);
-            UIComponent detail = Ui.component(() -> {
-                List<BoardSnapshot.OrderEntry> selected = selectedOrder.get();
-                if (selected.isEmpty()) {
-                    return List.of(Ui.node("order-empty", "empty",
-                            () -> Ui.card(Ui.column(
-                                    Ui.heading("No orders in this category"),
-                                    Ui.text("Choose another category or check back after the next restock.")
-                            ).gap(7)).padding(8).height(panelHeight)));
-                }
-                BoardSnapshot.OrderEntry order = selected.get(0);
-                // Preserve an unchanged detail panel (and scroll offset) across
-                // refreshes; replace it when its state/inventory actually changes.
-                String identity = orderKey(order) + "@" + order.hashCode();
-                return List.of(Ui.node("order-detail", identity,
+            UIComponent browser = Ui.switcher(orderView)
+                    .when("Grid", () -> Ui.virtualGrid(orderRows, this::orderGridCard)
+                            .key(row -> orderKey(row.order()))
+                            .minCellWidth(96).cellHeight(82).gap(4)
+                            .height(panelHeight).width(listWidth))
+                    .when("List", () -> Ui.list(orderRows, this::orderListRow)
+                            .key(row -> orderKey(row.order()))
+                            .itemHeight(39).gap(4)
+                            .height(panelHeight).width(listWidth));
+            UIComponent details = Ui.component(() -> {
+                List<BoardSnapshot.OrderEntry> selection = selectedOrder.get();
+                if (selection.isEmpty()) return List.of(Ui.node("orders-empty", "empty",
+                        () -> Ui.card(Ui.column(
+                                Ui.heading("No matching orders"),
+                                Ui.text("Adjust your search or filters.")
+                        ).gap(6)).padding(7).height(panelHeight)));
+                BoardSnapshot.OrderEntry order = selection.get(0);
+                return List.of(Ui.node("order-detail", orderKey(order) + "@" + order.hashCode(),
                         () -> orderDetails(order, panelHeight)));
-            }).height(panelHeight).width(detailWidth);
+            }).width(detailWidth).height(panelHeight);
 
-            UIComponent body;
-            if (uiWidth() >= 410) {
-                body = centeredRow(list, detail).gap(6);
-            } else {
-                // Two independently scrollable areas remain accessible on a
-                // small screen; the outer viewport provides vertical navigation.
-                body = Ui.scroll(Ui.column(
-                        list.height(94),
-                        detail.height(Math.max(165, panelHeight))
-                ).gap(6)).height(Math.max(108, uiHeight() - 123));
-            }
+            UIComponent browserBody = Ui.card(browser).padding(2)
+                    .width(listWidth).height(panelHeight);
+            UIComponent rightBody = details.width(detailWidth);
+            UIComponent main = mainWidth() >= 215
+                    ? centeredRow(browserBody, rightBody).gap(6)
+                    : Ui.scroll(Ui.column(browserBody.height(93), rightBody.height(160)).gap(5))
+                            .height(panelHeight);
+
             return Ui.column(
-                    centeredRow(Ui.heading("Dispatch board"), Ui.spacer(),
-                            Ui.badge(Component.literal("AUTO"), Badge.Variant.NEUTRAL)),
-                    Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
-                            .tab("Town", "Town").tab("Special", "Special"),
-                    body
-            ).gap(5);
+                    centeredRow(
+                            Ui.textField(orderSearch).placeholder("Search item or order...").width(Math.max(85, mainWidth() - 152)),
+                            Ui.select(orderScope).option("All", "All").option("Personal", "Personal")
+                                    .option("Global", "Global").width(72),
+                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
+                    ).gap(4),
+                    centeredRow(
+                            Ui.select(orderType).option("All types", "All").option("Normal", "Normal")
+                                    .option("Special", "Special").width(73),
+                            Ui.select(orderStatus).option("Any state", "All").option("Ready", "Ready")
+                                    .option("Available", "Available").option("Taken", "Taken")
+                                    .option("Restocking", "Restocking").width(76),
+                            Ui.select(orderSort).option("Ready first", "Ready").option("Reward", "Reward")
+                                    .option("Soonest", "Time").option("Item A-Z", "Item").width(73),
+                            Ui.button(readyOnly.get() ? "Ready ✓" : "Ready",
+                                    () -> readyOnly.set(!readyOnly.get())).small(),
+                            Ui.button("▦", () -> orderView.set("Grid"))
+                                    .small(),
+                            Ui.button("☷", () -> orderView.set("List")).small()
+                    ).gap(3),
+                    main
+            ).gap(4);
         }
 
-        /** Entire card is clickable and focusable (Enter/Space); real items are rendered. */
+        private UIComponent orderGridCard(OrderRow row) {
+            BoardSnapshot.OrderEntry o = row.order();
+            String item = readableItem(o.item());
+            return Ui.card(Ui.column(
+                    centeredRow(OrderItemIcons.icon(o.item()),
+                            Ui.text(o.quantity() + " " + item).nowrap().ellipsis(true).flex()).gap(4),
+                    centeredRow(Ui.heading("$" + o.reward()),
+                            Ui.spacer(), Ui.text(compactRarity(o.rarity())).nowrap().ellipsis(true)).gap(2),
+                    centeredRow(Ui.text(compactScope(o.scope())),
+                            Ui.spacer(), Ui.text(isSpecial(o) ? "★ Special" : shortStatus(o.status()))
+                                    .nowrap().ellipsis(true)).gap(3),
+                    Ui.progress(Signals.of(o.quantity() == 0 ? 0
+                            : Math.min(1.0, o.inInventory() / (double) o.quantity()))).height(6),
+                    Ui.text(o.canAccept()
+                            ? o.inInventory() + "/" + o.quantity() + "  | " + shortOrderTime(o)
+                            : shortStatus(o.status())).nowrap().ellipsis(true)
+            ).gap(3)).padding(4).selected(row.selected()).elevated(false)
+                    .onClick(() -> selectedOrderKey.set(orderKey(o)));
+        }
+
         private UIComponent orderListRow(OrderRow row) {
-            BoardSnapshot.OrderEntry order = row.order();
-            String title = order.canAccept()
-                    ? order.quantity() + " " + readableItem(order.item())
-                    : "Slot " + (order.slot() + 1) + " - " + shortStatus(order.status());
-            String subtitle = order.canAccept()
-                    ? "$" + order.reward() + "  |  " + compactRarity(order.rarity())
-                    : shortStatus(order.status()) + "  |  " + compactScope(order.scope());
-            UIComponent icon = order.canAccept()
-                    ? OrderItemIcons.icon(order.item())
-                    : Ui.icon("~", 0xA0A0A0);
-            return Ui.card(centeredRow(
-                    icon,
+            BoardSnapshot.OrderEntry o = row.order();
+            return Ui.card(centeredRow(OrderItemIcons.icon(o.item()),
                     Ui.column(
-                            Ui.text(title).nowrap().ellipsis(true),
-                            Ui.text(subtitle).nowrap().ellipsis(true)
-                    ).gap(2).flex()
-            ).gap(5)).padding(4)
-                    .selected(row.selected()).elevated(false)
-                    .onClick(() -> selectedOrderKey.set(orderKey(order)));
+                            Ui.text(o.quantity() + " " + readableItem(o.item())).nowrap().ellipsis(true),
+                            Ui.text("$" + o.reward() + " | " + compactScope(o.scope())
+                                    + (isSpecial(o) ? " ★" : "")).nowrap().ellipsis(true)
+                    ).gap(3).flex()
+            ).gap(5)).padding(4).selected(row.selected()).elevated(false)
+                    .onClick(() -> selectedOrderKey.set(orderKey(o)));
         }
 
-        /** Stable across offer rotation, and unique across personal/shared boards. */
         private static String orderKey(BoardSnapshot.OrderEntry order) {
             return order.board() + "#" + order.slot();
         }
 
         private static String compactScope(String value) {
-            return "SHARED".equals(value) ? "Town" : "Personal";
+            return "SHARED".equals(value) ? "Global" : "Personal";
         }
 
         private static String compactRarity(String rarity) {
@@ -360,101 +379,85 @@ public final class BountyBoardClient {
         }
 
         private static Badge.Variant rarityColor(String rarity) {
-            return switch (rarity.toLowerCase(java.util.Locale.ROOT)) {
+            if (rarity == null) return Badge.Variant.NEUTRAL;
+            return switch (rarity.toLowerCase(Locale.ROOT)) {
                 case "rare", "epic", "event" -> Badge.Variant.WARNING;
                 case "uncommon" -> Badge.Variant.PRIMARY;
                 default -> Badge.Variant.NEUTRAL;
             };
         }
 
-        /** Independent scroll viewport for the details, with a pinned action footer. */
+        private static String shortOrderTime(BoardSnapshot.OrderEntry order) {
+            if (!order.canAccept()) return shortStatus(order.status());
+            long seconds = Math.max(0, order.expiresAt() - Instant.now().getEpochSecond());
+            return formatTime(seconds);
+        }
+
         private UIComponent orderDetails(BoardSnapshot.OrderEntry order, int height) {
             List<UIComponent> content = new ArrayList<>();
-            String scope = compactScope(order.scope());
-            UIComponent icon = order.canAccept()
-                    ? OrderItemIcons.icon(order.item())
-                    : Ui.icon("~", 0xA0A0A0);
             content.add(centeredRow(
-                    icon,
+                    OrderItemIcons.icon(order.item()).size(25),
                     Ui.column(
                             Ui.heading(order.title()).nowrap().ellipsis(true),
-                            Ui.text(order.canAccept() ? readableItem(order.item()) : shortStatus(order.status()))
-                                    .nowrap().ellipsis(true)
+                            Ui.text(readableItem(order.item())).nowrap().ellipsis(true)
                     ).gap(3).flex()
-            ).gap(8));
+            ).gap(6));
             content.add(centeredRow(
-                    Ui.badge(Component.literal(scope), Badge.Variant.NEUTRAL),
-                    Ui.badge(Component.literal(compactRarity(order.rarity())), rarityColor(order.rarity()))
-            ).gap(4));
-
+                    Ui.badge(Component.literal(compactScope(order.scope())), Badge.Variant.NEUTRAL),
+                    Ui.badge(Component.literal(compactRarity(order.rarity())), rarityColor(order.rarity())),
+                    isSpecial(order) ? Ui.badge(Component.literal("Special"), Badge.Variant.WARNING) : Ui.spacer()
+            ).gap(3));
             if (order.canAccept()) {
                 content.add(Ui.divider());
                 content.add(centeredRow(
                         OrderItemIcons.icon(order.item()),
                         Ui.heading("Need " + order.quantity()),
                         Ui.spacer(),
-                        Ui.badge(Component.literal(Math.min(order.inInventory(), order.quantity()) + "/" + order.quantity()),
-                                order.inInventory() >= order.quantity()
-                                        ? Badge.Variant.SUCCESS : Badge.Variant.NEUTRAL)
-                ).gap(5));
-                double ratio = order.quantity() == 0 ? 0.0
-                        : Math.max(0, Math.min(1.0, order.inInventory() / (double) order.quantity()));
+                        Ui.badge(Component.literal(order.inInventory() + "/" + order.quantity()),
+                                isReady(order) ? Badge.Variant.SUCCESS : Badge.Variant.NEUTRAL)
+                ).gap(3));
+                double ratio = order.quantity() <= 0 ? 0
+                        : Math.max(0, Math.min(1, order.inInventory() / (double) order.quantity()));
                 content.add(Ui.progress(Signals.of(ratio)).height(7).fillWidth());
-                content.add(Ui.text(order.inInventory() >= order.quantity()
-                        ? "All items ready for delivery."
-                        : "Collect " + Math.max(0, order.quantity() - order.inInventory()) + " more to deliver now."));
-                content.add(Ui.divider());
-                content.add(centeredRow(
-                        Ui.icon("$", 0x67DDAC),
-                        Ui.heading("$" + order.reward()),
-                        Ui.spacer(),
-                        Ui.badge(Component.literal("REWARD"), Badge.Variant.SUCCESS)
-                ).gap(5));
+                content.add(Ui.text(isReady(order) ? "Ready to deliver"
+                        : "Missing " + Math.max(0, order.quantity() - order.inInventory()) + " items"));
             } else {
-                content.add(Ui.text(switch (order.status()) {
-                    case "TAKEN" -> "This order is accepted. Progress and claim are under Contracts.";
-                    case "CLAIMED" -> "A player has claimed this shared order.";
-                    default -> "The slot is resting before a replacement appears.";
-                }));
+                content.add(Ui.text(shortStatus(order.status())));
             }
+            content.add(Ui.divider());
+            content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
+                    Ui.heading("$" + order.reward()), Ui.spacer()).gap(4));
             content.add(Ui.text(orderTime(order)));
-            if (order.canAccept()) {
-                content.add(Ui.text(switch (order.timer()) {
-                    case "ACCEPT" -> "Delivery timer starts after you accept.";
-                    case "OFFER" -> "Rush timer is already running.";
-                    default -> "No delivery deadline after acceptance.";
-                }));
-            }
+            if (order.canAccept()) content.add(Ui.text(switch (order.timer()) {
+                case "ACCEPT" -> "Delivery clock begins on acceptance";
+                case "OFFER" -> "Rush deadline already active";
+                default -> "No delivery deadline";
+            }));
+
             List<UIComponent> actions = new ArrayList<>();
             if (order.canAccept()) {
-                if (order.inInventory() >= order.quantity()) {
-                    actions.add(Ui.button("Deliver now", () -> BountyNetwork.sendRequest(BoardRequest.order(
-                            BoardRequest.Action.FULFILL_ORDER, order.board(), order.slot(), order.offerId())))
-                            .success().small());
-                }
+                if (isReady(order)) actions.add(Ui.button("Deliver", () ->
+                        BountyNetwork.sendRequest(BoardRequest.order(
+                                BoardRequest.Action.FULFILL_ORDER, order.board(), order.slot(),
+                                order.offerId()))).success().small());
                 actions.add(Ui.button("Accept", () -> BountyNetwork.sendRequest(BoardRequest.order(
                         BoardRequest.Action.ACCEPT_ORDER, order.board(), order.slot(), order.offerId())))
                         .primary().small());
-                if (order.canDiscard()) {
-                    actions.add(Ui.button("Discard", () -> BountyNetwork.sendRequest(BoardRequest.order(
-                            BoardRequest.Action.DISCARD_ORDER, order.board(), order.slot(), order.offerId())))
-                            .ghost().small());
-                }
+                if (order.canDiscard()) actions.add(Ui.button("Discard", () ->
+                        BountyNetwork.sendRequest(BoardRequest.order(
+                                BoardRequest.Action.DISCARD_ORDER, order.board(), order.slot(),
+                                order.offerId()))).ghost().small());
             } else if ("TAKEN".equals(order.status())) {
-                actions.add(Ui.button("View Contract", () -> tab.set("Generated")).primary().small());
+                actions.add(Ui.button("Contracts", () -> tab.set("Generated")).primary().small());
             }
-            UIComponent footer = actions.isEmpty()
-                    ? Ui.text("Updates automatically")
-                    : centeredRow(actions.toArray(UIComponent[]::new)).gap(4);
-            // ScrollView gets its own finite height; footer is outside of it.
-            // The detail panel is rebuilt only on meaningful data/selection changes.
-            int scrollHeight = Math.max(70, height - 54);
+            UIComponent footer = actions.isEmpty() ? Ui.text("Auto-restocking")
+                    : centeredRow(actions.toArray(UIComponent[]::new)).gap(3);
             return Ui.card(Ui.column(
-                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(6))
-                            .height(scrollHeight),
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
+                            .height(Math.max(62, height - 37)),
                     Ui.divider(),
                     footer
-            ).gap(5)).padding(6).height(height);
+            ).gap(4)).padding(5).height(height);
         }
 
         private static String readableItem(String id) {
