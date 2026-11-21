@@ -42,6 +42,15 @@ public final class BountyBoardClient {
                     case "Special" -> order.board().contains("daily_") || order.board().contains("festival");
                     default -> true;
                 }).toList());
+        private final Signal<String> selectedOrderKey = Signals.of("");
+        private final Computed<List<BoardSnapshot.OrderEntry>> selectedOrder = Signals.computed(() -> {
+            List<BoardSnapshot.OrderEntry> choices = visibleOrders.get();
+            if (choices.isEmpty()) return List.of();
+            String selected = selectedOrderKey.get();
+            return List.of(choices.stream()
+                    .filter(order -> orderKey(order).equals(selected))
+                    .findFirst().orElse(choices.get(0)));
+        });
         private final Signal<List<BoardSnapshot.PoolEntry>> pools = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> generated = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> posted = Signals.of(List.of());
@@ -108,56 +117,99 @@ public final class BountyBoardClient {
          * button is needed. A slot is locked on acceptance before a bounty grant.
          */
         private UIComponent ordersPanel() {
+            // OpenUI VirtualList allocates 20px to each entry by default. Never
+            // place a multi-line order card inside it: the lower rows and buttons
+            // become clipped and cannot receive mouse clicks. Render one compact
+            // selectable row per slot and use a separate fixed-height detail pane.
+            var list = Ui.list(visibleOrders, this::orderListRow)
+                    .key(BountyBoardScreen::orderKey)
+                    .itemHeight(25).gap(3).height(169);
+            var details = Ui.list(selectedOrder, this::orderDetails)
+                    .key(BountyBoardScreen::orderKey)
+                    .itemHeight(169).height(169);
+
+            UIComponent body;
+            if (uiWidth() >= 390) {
+                body = centeredRow(
+                        list.width(176),
+                        details.width(Math.max(135, uiWidth() - 205))
+                ).gap(6);
+            } else {
+                // Stacked presentation on narrow GUIs. The independent list and
+                // details viewports keep both click targets and actions usable.
+                body = Ui.scroll(Ui.column(
+                        list.height(84),
+                        details.height(169)
+                ).gap(5)).height(Math.max(110, uiHeight() - 94));
+            }
             return Ui.column(
                     centeredRow(Ui.heading("Dispatch board"), Ui.spacer(),
                             Ui.badge("AUTO-RESTOCK")),
-                    Ui.text("Orders restock automatically. Rare deliveries earn more."),
                     Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
                             .tab("Town", "Town").tab("Special", "Special"),
-                    Ui.list(visibleOrders, this::orderCard).height(Math.max(120, uiHeight() - 130))
-            ).gap(5);
+                    body
+            ).gap(6);
         }
 
-        private UIComponent orderCard(BoardSnapshot.OrderEntry order) {
-            boolean ready = order.canAccept();
-            boolean isWaiting = "RESTOCKING".equals(order.status()) || "CLAIMED".equals(order.status());
-            String kind = "SHARED".equals(order.scope()) ? "TOWN" : "PERSONAL";
-            String badge = order.rarity().isBlank() ? kind : order.rarity().toUpperCase(java.util.Locale.ROOT) + " / " + kind;
-            String headline = isWaiting ? "Slot " + (order.slot() + 1) + " - " + order.status()
-                    : order.title();
-            List<UIComponent> lines = new ArrayList<>();
-            lines.add(centeredRow(Ui.heading(headline), Ui.spacer(), Ui.badge(badge)).gap(4));
-            if (!isWaiting) {
-                lines.add(centeredRow(
-                        Ui.text("Deliver " + order.quantity() + " " + readableItem(order.item())),
-                        Ui.spacer(), Ui.badge("$" + order.reward())).gap(4));
-                if (ready) {
-                    long owned = order.inInventory();
-                    lines.add(centeredRow(Ui.text("In inventory: " + owned + "/" + order.quantity()),
-                            Ui.spacer(), Ui.badge(owned >= order.quantity() ? "READY" : "NEED ITEMS")).gap(4));
-                }
+        /** A whole list row is one large, keyboard-accessible selection target. */
+        private UIComponent orderListRow(BoardSnapshot.OrderEntry order) {
+            String label;
+            if (order.canAccept()) {
+                label = order.quantity() + " " + readableItem(order.item()) + "  $" + order.reward();
+            } else if ("TAKEN".equals(order.status())) {
+                label = "Slot " + (order.slot() + 1) + "  Accepted";
+            } else if ("CLAIMED".equals(order.status())) {
+                label = "Slot " + (order.slot() + 1) + "  Taken";
+            } else {
+                label = "Slot " + (order.slot() + 1) + "  Restocking";
             }
-            List<UIComponent> controls = new ArrayList<>();
-            lines.add(Ui.text(orderTime(order)));
-            if (ready) {
+            return Ui.button(label, () -> selectedOrderKey.set(orderKey(order))).small();
+        }
+
+        /** Unique for the board slot, stable across offer rotation and refreshes. */
+        private static String orderKey(BoardSnapshot.OrderEntry order) {
+            return order.board() + "#" + order.slot();
+        }
+
+        private UIComponent orderDetails(BoardSnapshot.OrderEntry order) {
+            List<UIComponent> content = new ArrayList<>();
+            String scope = "SHARED".equals(order.scope()) ? "TOWN" : "PERSONAL";
+            String rarity = order.rarity().isBlank() ? scope
+                    : scope + " / " + order.rarity().toUpperCase(java.util.Locale.ROOT);
+            content.add(Ui.heading(order.title()));
+            content.add(Ui.badge(rarity));
+            if (order.canAccept()) {
+                content.add(Ui.text("Deliver: " + order.quantity() + " " + readableItem(order.item())));
+                content.add(Ui.text("In inventory: " + order.inInventory() + " / " + order.quantity()));
+                content.add(Ui.text("Reward: $" + order.reward()));
+            } else if ("TAKEN".equals(order.status())) {
+                content.add(Ui.text("You accepted this order."));
+            } else if ("CLAIMED".equals(order.status())) {
+                content.add(Ui.text("Another player took this order."));
+            } else {
+                content.add(Ui.text("This slot is restocking."));
+            }
+            content.add(Ui.text(orderTime(order)));
+            List<UIComponent> actions = new ArrayList<>();
+            if (order.canAccept()) {
                 if (order.inInventory() >= order.quantity()) {
-                    controls.add(Ui.button("Deliver now", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                    actions.add(Ui.button("Deliver now", () -> BountyNetwork.sendRequest(BoardRequest.order(
                             BoardRequest.Action.FULFILL_ORDER, order.board(), order.slot(), order.offerId())))
                             .success().small());
                 }
-                controls.add(Ui.button("Accept", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                actions.add(Ui.button("Accept", () -> BountyNetwork.sendRequest(BoardRequest.order(
                         BoardRequest.Action.ACCEPT_ORDER, order.board(), order.slot(), order.offerId())))
                         .primary().small());
                 if (order.canDiscard()) {
-                    controls.add(Ui.button("Discard", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                    actions.add(Ui.button("Discard", () -> BountyNetwork.sendRequest(BoardRequest.order(
                             BoardRequest.Action.DISCARD_ORDER, order.board(), order.slot(), order.offerId())))
                             .ghost().small());
                 }
             } else if ("TAKEN".equals(order.status())) {
-                controls.add(Ui.button("View contract", () -> tab.set("Generated")).small());
+                actions.add(Ui.button("View contract", () -> tab.set("Generated")).primary().small());
             }
-            lines.add(centeredRow(controls.toArray(UIComponent[]::new)).gap(5));
-            return Ui.card(Ui.column(lines.toArray(UIComponent[]::new)).gap(4)).padding(6);
+            if (!actions.isEmpty()) content.add(centeredRow(actions.toArray(UIComponent[]::new)).gap(4));
+            return Ui.card(Ui.column(content.toArray(UIComponent[]::new)).gap(5)).padding(6);
         }
 
         private static String readableItem(String id) {
@@ -210,7 +262,7 @@ public final class BountyBoardClient {
                     Ui.list(pools, pool -> Ui.button("Roll " + pool.id(), () ->
                             BountyNetwork.sendRequest(BoardRequest.roll(pool.id()))).small()).height(54),
                     Ui.heading("Your bounties"),
-                    Ui.list(generated, this::bountyCard).height(180)
+                    Ui.list(generated, this::bountyCard).itemHeight(156).gap(5).height(180)
             ).gap(5);
         }
 
@@ -218,7 +270,7 @@ public final class BountyBoardClient {
             return Ui.column(
                     centeredRow(Ui.heading("Player-posted bounties"), Ui.spacer(),
                             Ui.button("Create", () -> tab.set("Create")).primary().small()).gap(6),
-                    Ui.list(posted, this::bountyCard).height(235)
+                    Ui.list(posted, this::bountyCard).itemHeight(156).gap(5).height(235)
             ).gap(5);
         }
 
