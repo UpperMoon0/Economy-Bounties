@@ -141,6 +141,10 @@ public final class DefaultBountyService implements BountyService {
         if (existing != null) {
             if (!existing.playerId().equals(playerId) || !existing.definition().id().equals(definition.id()))
                 throw new IllegalStateException("Order grant identity collision");
+            // The prior attempt may have installed this instance in memory, but
+            // failed to persist it before returning. Replay the save before
+            // telling the order board its write-ahead claim is committed.
+            save(state);
             return existing.view();
         }
         List<BountyInstanceState.ObjectiveState> objectives = new ArrayList<>();
