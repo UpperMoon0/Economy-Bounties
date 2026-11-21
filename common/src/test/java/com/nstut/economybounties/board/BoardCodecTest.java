@@ -51,6 +51,27 @@ class BoardCodecTest {
     }
 
     @Test
+    void oneClickOrderIntentAndInventoryPreviewRoundTrip() {
+        BoardRequest oneClick = BoardRequest.order(BoardRequest.Action.FULFILL_ORDER,
+                "economy_bounties:farm_orders", 2,
+                "11111111-2222-4333-8444-555555555555");
+        assertEquals(oneClick, BoardCodec.decodeRequest(BoardCodec.encodeRequest(oneClick)));
+        assertEquals(BoardRequest.Action.FULFILL_ORDER, oneClick.action());
+        assertEquals(2, oneClick.objectiveIndex());
+        assertThrows(IllegalArgumentException.class, () -> BoardRequest.order(BoardRequest.Action.ROLL,
+                "economy_bounties:farm_orders", 0, "11111111-2222-4333-8444-555555555555"));
+        var available = new BoardSnapshot.OrderEntry("economy_bounties:farm_orders", "PERSONAL", 0,
+                "11111111-2222-4333-8444-555555555555", "Farmer supply", "minecraft:wheat",
+                16, "55.00", "Common", "ACCEPT", "AVAILABLE", 1800,
+                1800000000L, 0, true, true, 24);
+        var snapshot = new BoardSnapshot(List.of(), List.of(), List.of(), "",
+                List.of(available));
+        var restored = BoardCodec.decodeSnapshot(BoardCodec.encodeSnapshot(snapshot));
+        assertEquals(snapshot, restored);
+        assertEquals(24, restored.orders().get(0).inInventory());
+    }
+
+    @Test
     void codecRejectsOversizedInboundPayloadBeforeParsing() {
         String oversized = "x".repeat(BoardCodec.MAX_JSON_CHARS + 1);
         assertThrows(IllegalArgumentException.class, () -> BoardCodec.decodeRequest(oversized));
