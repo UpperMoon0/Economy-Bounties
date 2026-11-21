@@ -1,0 +1,114 @@
+package com.nstut.economybounties.minecraft;
+
+import com.nstut.economybounties.api.*;
+import com.nstut.economybounties.core.DefaultBountyService;
+import com.nstut.economybounties.core.DefaultPostedBountyService;
+import com.nstut.economybounties.data.JsonDirectoryBountyStateStore;
+import com.nstut.economybounties.data.JsonFilePostedBountyStore;
+import com.nstut.economybounties.network.BountyNetwork;
+import com.nstut.economybounties.orders.OrderBoardDefinition;
+import com.nstut.economybounties.orders.OrderBoardService;
+import dev.architectury.event.events.common.LifecycleEvent;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+/** Shared server runtime for the 1.20.1 and 1.21.1 loader families. */
+public final class EconomyBountiesRuntime {
+    public static final String MOD_ID = "economy_bounties";
+    private static final ObjectiveRegistry OBJECTIVES = new ObjectiveRegistry();
+    private static volatile List<BountyDefinition> definitions = List.of();
+    private static volatile Map<NamespacedId, BountyPoolDefinition> pools = Map.of();
+    private static volatile List<OrderBoardDefinition> orderBoards = List.of();
+    private static volatile OrderBoardService orders;
+    private static volatile MinecraftServer server;
+    private static volatile DefaultBountyService generated;
+    private static volatile DefaultPostedBountyService posted;
+    private static boolean initialized;
+
+    private EconomyBountiesRuntime() { }
+
+    public static synchronized void init() {
+        if (initialized) return;
+        initialized = true;
+        BountyBoardRegistries.init();
+        BuiltinObjectiveTypes.registerAll(OBJECTIVES);
+        BountyNetwork.registerCommon();
+        BountyBoardCommands.register();
+        BountyDataReloadListener.register();
+        BountyObjectiveEvents.register();
+        LifecycleEvent.SERVER_STARTED.register(EconomyBountiesRuntime::start);
+        LifecycleEvent.SERVER_STOPPED.register(ignored -> stop());
+    }
+
+    private static synchronized void start(MinecraftServer minecraftServer) {
+        server = Objects.requireNonNull(minecraftServer, "minecraftServer");
+        Path dataRoot = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(MOD_ID);
+        EconomyMoneyAdapter money = new EconomyMoneyAdapter(dataRoot.resolve("economy_operations.json"));
+        ProgressionProvider progression = (playerId, group) -> MinecraftAudienceProvider.experienceLevel(server, playerId);
+        generated = new DefaultBountyService(progression, money, OBJECTIVES,
+                new JsonDirectoryBountyStateStore(dataRoot.resolve("players")), 12);
+        generated.replaceDefinitions(definitions);
+        orders = new OrderBoardService(dataRoot, server.overworld().getSeed(), generated,
+                input -> com.nstut.economy.api.MarketPriceQuotes.quoteItem(input.target())
+                        .orElse(input.referencePrice()));
+        orders.replaceDefinitions(orderBoards);
+        posted = new DefaultPostedBountyService(new MinecraftAudienceProvider(server), OBJECTIVES,
+                new JsonFilePostedBountyStore(dataRoot.resolve("posted_bounties.json")), money);
+        posted.recover(Instant.now());
+    }
+
+    private static synchronized void stop() { orders = null; posted = null; generated = null; server = null; }
+
+    public static synchronized void replaceData(Collection<BountyDefinition> loadedDefinitions,
+                                                Map<NamespacedId, BountyPoolDefinition> loadedPools,
+                                                Collection<OrderBoardDefinition> loadedOrders) {
+        definitions = List.copyOf(loadedDefinitions);
+        pools = Map.copyOf(loadedPools);
+        orderBoards = List.copyOf(loadedOrders);
+        if (generated != null) generated.replaceDefinitions(definitions);
+        if (orders != null) orders.replaceDefinitions(orderBoards);
+    }
+
+    public static synchronized void replaceData(Collection<BountyDefinition> loadedDefinitions,
+                                                Map<NamespacedId, BountyPoolDefinition> loadedPools) {
+        replaceData(loadedDefinitions, loadedPools, orderBoards);
+    }
+
+    public static boolean ready() { return server != null && generated != null && posted != null; }
+    public static MinecraftServer server() { return require(server, "server"); }
+    public static BountyService generated() { return require(generated, "generated bounty service"); }
+    public static PostedBountyService posted() { return require(posted, "posted bounty service"); }
+    public static ObjectiveRegistry objectives() { return OBJECTIVES; }
+    public static OrderBoardService orders() { return require(orders, "automatic order board service"); }
+
+    public static List<OrderBoardService.Card> ordersFor(UUID playerId, int level, Instant now) {
+        return ready() ? orders().list(playerId, level, now) : List.of();
+    }
+
+    public static List<BountyView> generatedFor(UUID playerId, Instant now) {
+        return ready() ? generated.list(playerId, now) : List.of();
+    }
+    public static List<PostedBountyView> postedFor(UUID playerId, Instant now) {
+        return ready() ? posted.listVisible(playerId, now) : List.of();
+    }
+
+    public static void recordProgress(ProgressEvent event) {
+        if (!ready()) return;
+        Instant now = Instant.now();
+        generated.recordProgress(event, now);
+        posted.recordProgress(event, now);
+    }
+
+    private static <T> T require(T value, String name) {
+        if (value == null) throw new IllegalStateException("Economy Bounties " + name + " is not ready");
+        return value;
+    }
+}

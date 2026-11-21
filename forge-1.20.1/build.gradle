@@ -1,0 +1,55 @@
+plugins { id 'com.gradleup.shadow' }
+
+def commonProject = project(':common-1.20.1')
+ext.minecraft_version = commonProject.minecraft_version
+ext.architectury_api_version = commonProject.architectury_api_version
+ext.forge_version = commonProject.forge_version
+def bountyModId = rootProject.mod_id
+
+loom {
+    forge {
+    }
+    runs {
+        gameTestServer {
+            server()
+            environment("gametestserver")
+            runDir("run/gametest")
+            property "forge.enabledGameTestNamespaces", bountyModId
+        }
+    }
+}
+
+architectury { platformSetupLoomIde(); forge() }
+configurations {
+    common { canBeResolved = true; canBeConsumed = false }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentForge.extendsFrom common
+    shadowBundle { canBeResolved = true; canBeConsumed = false }
+}
+dependencies {
+    forge "net.minecraftforge:forge:${project.forge_version}"
+    modImplementation "dev.architectury:architectury-forge:${project.architectury_api_version}"
+    compileOnly "com.nstut:economy-forge-1.20.1:${rootProject.economy_version}:dev-shadow"
+    runtimeOnly "com.nstut:economy-forge-1.20.1:${rootProject.economy_version}:dev-shadow"
+    compileOnly "com.nstut:openui-mc-forge-1.20.1:${rootProject.openui_version}:dev-shadow"
+    runtimeOnly "com.nstut:openui-mc-forge-1.20.1:${rootProject.openui_version}:dev-shadow"
+    implementation project(':common')
+    common(project(path: ':common-1.20.1', configuration: 'namedElements')) { transitive false }
+    shadowBundle project(path: ':common-1.20.1', configuration: 'transformProductionForge')
+}
+processResources {
+    inputs.properties version: project.version, mod_id: rootProject.mod_id, mod_name: rootProject.mod_name, mod_description: rootProject.mod_description,
+            mod_authors: rootProject.mod_authors, minecraft_version: project.minecraft_version, economy_version: rootProject.economy_version, openui_version: rootProject.openui_version
+    filesMatching('META-INF/mods.toml') { expand(inputs.properties) }
+}
+
+// GameTest classes/templates are development-only. Keep them available to the
+// real-server run while excluding them from production artifacts.
+tasks.withType(Jar).configureEach {
+    exclude 'com/nstut/economybounties/forge/gametest/**'
+    exclude 'data/economy_bounties/structures/economy_bounties_gametest_empty.nbt'
+}
+
+shadowJar { configurations = [project.configurations.shadowBundle]; archiveClassifier = 'dev-shadow' }
+remapJar { inputFile.set shadowJar.archiveFile }

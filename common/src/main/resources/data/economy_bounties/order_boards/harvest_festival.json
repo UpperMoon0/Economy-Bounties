@@ -1,0 +1,70 @@
+{
+  "id": "economy_bounties:harvest_festival",
+  "scope": "shared",
+  "slots": 2,
+  "restock_seconds": 1200,
+  "rotation_seconds": 43200,
+  "allow_discard": false,
+  "minimum_reward": "60.00",
+  "maximum_reward": "3000.00",
+  "inputs": [
+    {
+      "item": "minecraft:wheat",
+      "quantity": {
+        "min": 64,
+        "max": 128
+      },
+      "weight": 7,
+      "reference_price": "2.50",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:pumpkin",
+      "quantity": {
+        "min": 16,
+        "max": 32
+      },
+      "weight": 5,
+      "reference_price": "5.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:carrot",
+      "quantity": {
+        "min": 48,
+        "max": 96
+      },
+      "weight": 6,
+      "reference_price": "3.00",
+      "min_level": 0
+    }
+  ],
+  "rewards": [
+    {
+      "id": "harvest",
+      "title": "Harvest festival shipment",
+      "rarity": "Event",
+      "weight": 8,
+      "multiplier": "2.00",
+      "bonus": "80.00",
+      "timer": "accept",
+      "duration_seconds": 10800,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    },
+    {
+      "id": "flash",
+      "title": "Festival rush",
+      "rarity": "Event",
+      "weight": 2,
+      "multiplier": "2.80",
+      "bonus": "100.00",
+      "timer": "offer",
+      "duration_seconds": 3600,
+      "start_hour_utc": 12,
+      "end_hour_utc": 22
+    }
+  ],
+  "active_from_epoch": 1795222800,
+  "active_until_epoch": 1798761600
+}

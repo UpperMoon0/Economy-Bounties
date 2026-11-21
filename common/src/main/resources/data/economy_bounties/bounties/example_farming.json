@@ -1,0 +1,34 @@
+{
+  "id": "economy_bounties:example_farming",
+  "group": "economy_bounties:farming",
+  "tier": 1,
+  "min_level": 0,
+  "max_level": 100,
+  "weight": 10,
+  "offer_duration_seconds": 3600,
+  "cooldown_seconds": 30,
+  "objectives": [
+    {
+      "type": "economy_bounties:deliver_item",
+      "target": "minecraft:carrot",
+      "amount": {
+        "min": 4,
+        "max": 8
+      }
+    }
+  ],
+  "reward": {
+    "currency": {
+      "min": "20.00",
+      "max": "35.00"
+    },
+    "metadata": {
+      "funding": "mint"
+    }
+  },
+  "tags": [
+    "example",
+    "starter",
+    "farming"
+  ]
+}

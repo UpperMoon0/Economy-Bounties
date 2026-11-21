@@ -1,0 +1,78 @@
+{
+  "id": "economy_bounties:daily_special",
+  "scope": "personal",
+  "slots": 2,
+  "restock_seconds": 86400,
+  "rotation_seconds": 86400,
+  "allow_discard": true,
+  "minimum_reward": "30.00",
+  "maximum_reward": "2000.00",
+  "inputs": [
+    {
+      "item": "minecraft:gold_ingot",
+      "quantity": {
+        "min": 4,
+        "max": 12
+      },
+      "weight": 3,
+      "reference_price": "22.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:iron_ingot",
+      "quantity": {
+        "min": 16,
+        "max": 36
+      },
+      "weight": 6,
+      "reference_price": "12.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:emerald",
+      "quantity": {
+        "min": 2,
+        "max": 8
+      },
+      "weight": 2,
+      "reference_price": "40.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:oak_log",
+      "quantity": {
+        "min": 48,
+        "max": 64
+      },
+      "weight": 4,
+      "reference_price": "4.00",
+      "min_level": 0
+    }
+  ],
+  "rewards": [
+    {
+      "id": "daily",
+      "title": "Daily merchant request",
+      "rarity": "Rare",
+      "weight": 9,
+      "multiplier": "2.00",
+      "bonus": "40.00",
+      "timer": "accept",
+      "duration_seconds": 21600,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    },
+    {
+      "id": "bonus",
+      "title": "Bonus delivery",
+      "rarity": "Epic",
+      "weight": 1,
+      "multiplier": "2.60",
+      "bonus": "75.00",
+      "timer": "offer",
+      "duration_seconds": 7200,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    }
+  ]
+}

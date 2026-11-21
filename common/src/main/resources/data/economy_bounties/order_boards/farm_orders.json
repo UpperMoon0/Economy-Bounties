@@ -1,0 +1,110 @@
+{
+  "id": "economy_bounties:farm_orders",
+  "scope": "personal",
+  "slots": 6,
+  "restock_seconds": 180,
+  "rotation_seconds": 7200,
+  "allow_discard": true,
+  "minimum_reward": "5.00",
+  "maximum_reward": "1000.00",
+  "inputs": [
+    {
+      "item": "minecraft:wheat",
+      "quantity": {
+        "min": 12,
+        "max": 32
+      },
+      "weight": 8,
+      "reference_price": "2.50",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:carrot",
+      "quantity": {
+        "min": 8,
+        "max": 24
+      },
+      "weight": 7,
+      "reference_price": "3.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:oak_log",
+      "quantity": {
+        "min": 6,
+        "max": 16
+      },
+      "weight": 5,
+      "reference_price": "4.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:cobblestone",
+      "quantity": {
+        "min": 16,
+        "max": 48
+      },
+      "weight": 5,
+      "reference_price": "1.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:iron_ingot",
+      "quantity": {
+        "min": 4,
+        "max": 12
+      },
+      "weight": 3,
+      "reference_price": "12.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:potato",
+      "quantity": {
+        "min": 8,
+        "max": 24
+      },
+      "weight": 6,
+      "reference_price": "2.80",
+      "min_level": 0
+    }
+  ],
+  "rewards": [
+    {
+      "id": "standard",
+      "title": "Town supply order",
+      "rarity": "Common",
+      "weight": 75,
+      "multiplier": "1.20",
+      "bonus": "5.00",
+      "timer": "none",
+      "duration_seconds": 3600,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    },
+    {
+      "id": "priority",
+      "title": "Priority delivery",
+      "rarity": "Uncommon",
+      "weight": 22,
+      "multiplier": "1.60",
+      "bonus": "10.00",
+      "timer": "accept",
+      "duration_seconds": 7200,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    },
+    {
+      "id": "rush",
+      "title": "Rush shipment",
+      "rarity": "Rare",
+      "weight": 3,
+      "multiplier": "2.25",
+      "bonus": "20.00",
+      "timer": "offer",
+      "duration_seconds": 1800,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    }
+  ]
+}

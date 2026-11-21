@@ -1,0 +1,34 @@
+{
+  "id": "economy_bounties:example_cobblestone_delivery",
+  "group": "economy_bounties:mining",
+  "tier": 1,
+  "min_level": 0,
+  "max_level": 100,
+  "weight": 10,
+  "offer_duration_seconds": 3600,
+  "cooldown_seconds": 30,
+  "objectives": [
+    {
+      "type": "economy_bounties:deliver_item",
+      "target": "minecraft:cobblestone",
+      "amount": {
+        "min": 8,
+        "max": 16
+      }
+    }
+  ],
+  "reward": {
+    "currency": {
+      "min": "12.00",
+      "max": "25.00"
+    },
+    "metadata": {
+      "funding": "mint"
+    }
+  },
+  "tags": [
+    "example",
+    "starter",
+    "mining"
+  ]
+}
