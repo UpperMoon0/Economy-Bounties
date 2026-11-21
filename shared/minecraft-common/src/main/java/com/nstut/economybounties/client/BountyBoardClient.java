@@ -164,10 +164,15 @@ public final class BountyBoardClient {
 
         private static String orderTime(BoardSnapshot.OrderEntry order) {
             long remaining = order.expiresAt() - Instant.now().getEpochSecond();
-            if ("RESTOCKING".equals(order.status()) || "TAKEN".equals(order.status())
-                    || "CLAIMED".equals(order.status())) {
+            if ("TAKEN".equals(order.status())) {
+                return "Accepted. Finish and claim it under Contracts.";
+            }
+            if ("CLAIMED".equals(order.status())) {
+                return "Another player is fulfilling this order.";
+            }
+            if ("RESTOCKING".equals(order.status())) {
                 long restock = Math.max(0, order.restocksAt() - Instant.now().getEpochSecond());
-                return "New order in " + formatTime(restock);
+                return "Next order in " + formatTime(restock);
             }
             return switch (order.timer()) {
                 case "NONE" -> "Refreshes in " + formatTime(Math.max(0, remaining)) + " | No delivery deadline";
