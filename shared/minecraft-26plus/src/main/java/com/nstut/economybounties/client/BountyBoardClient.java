@@ -16,6 +16,9 @@ import com.nstut.openui.state.Computed;
 import com.nstut.openui.state.Signal;
 import com.nstut.openui.state.Signals;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.network.chat.Component;
 
 import java.time.Instant;
@@ -111,6 +114,8 @@ public final class BountyBoardClient {
         private final Signal<String> postedView = Signals.of("List");
         private final Signal<String> postedSelection = Signals.of("");
         private final Signal<Boolean> advancedCreate = Signals.of(false);
+        private final Signal<Boolean> customIconEditor = Signals.of(false);
+        private final Signal<String> quickIcon = Signals.of("");
 
         private final Computed<List<BoardSnapshot.BountyEntry>> visibleContracts =
                 Signals.computed(() -> filterBounties(generated.get(), contractSearch.get(),
@@ -202,14 +207,18 @@ public final class BountyBoardClient {
 
         @Override protected UIComponent buildUI() {
             int side = sideWidth(), contentWidth = mainWidth(), height = mainHeight();
-            UIComponent sidebar = Ui.scroll(Ui.column(
-                    Ui.text("BOUNTIES").nowrap(),
-                    Ui.divider(),
-                    navButton("Orders", "Orders"),
-                    navButton("My Jobs", "Generated"),
-                    navButton(uiWidth() >= 410 ? "Player Jobs" : "Posts", "Posted"),
-                    navButton("Post Job", "Create")
-            ).gap(5)).width(side).height(height);
+            UIComponent sidebar = Ui.column(
+                    Ui.scroll(Ui.column(
+                            centeredRow(Ui.icon(new ItemStack(Items.WRITABLE_BOOK)).size(17),
+                                    Ui.text("BOUNTIES")).gap(4),
+                            Ui.divider(),
+                            navButton("Orders", "Orders"),
+                            navButton("My Jobs", "Generated"),
+                            navButton(uiWidth() >= 410 ? "Player Jobs" : "Posts", "Posted"),
+                            navButton("Post Job", "Create")
+                    ).gap(5)).flex(),
+                    sidebarOverview()
+            ).gap(5).width(side).height(height);
             UIComponent main = Ui.column(
                     centeredRow(
                             Ui.component(() -> {
@@ -252,6 +261,29 @@ public final class BountyBoardClient {
                             .onClick(() -> tab.set(destination));
                 }));
             }).width(sideWidth() - 7).height(27);
+        }
+
+        private UIComponent sidebarOverview() {
+            return Ui.component(() -> {
+                long available = orders.get().stream().filter(BoardSnapshot.OrderEntry::canAccept).count();
+                int jobs = generated.get().size(), community = posted.get().size();
+                return List.of(Ui.node("sidebar-overview",
+                        available + ":" + jobs + ":" + community,
+                        () -> Ui.card(Ui.column(
+                                centeredRow(Ui.icon(new ItemStack(Items.MAP)).size(16),
+                                        Ui.text("Board").nowrap()).gap(3),
+                                Ui.divider(),
+                                overviewCount("Offers", available),
+                                overviewCount("Mine", jobs),
+                                overviewCount("Posts", community)
+                        ).gap(3)).padding(4).elevated(false)));
+            }).height(88).width(sideWidth() - 6);
+        }
+
+        private UIComponent overviewCount(String label, long value) {
+            return centeredRow(Ui.text(label).nowrap().ellipsis(true).flex(),
+                    Ui.badge(Component.literal(String.valueOf(value)),
+                            Badge.Variant.NEUTRAL)).gap(3);
         }
 
         private static java.math.BigDecimal moneyValue(String amount) {
@@ -786,47 +818,65 @@ public final class BountyBoardClient {
             BountyNetwork.sendRequest(BoardRequest.bounty(action, bounty.id()));
         }
 
+        /** The whole builder scrolls; there is no fixed-height objective-list hole. */
         private UIComponent createPanel() {
             int panelHeight = contentHeight();
             int availableWidth = Math.max(145, mainWidth() - 8);
             int editorWidth = Math.max(94, (availableWidth * 55) / 100);
             int previewWidth = Math.max(90, availableWidth - editorWidth - 6);
             int inputWidth = Math.max(74, editorWidth - 22);
-
             List<UIComponent> editor = new ArrayList<>();
-            editor.add(Ui.heading("Player-funded bounty"));
-            editor.add(verticalField("Title", title, inputWidth));
-            editor.add(verticalField("Description", description, inputWidth));
-            editor.add(verticalField("Icon ID", icon, inputWidth));
+            editor.add(centeredRow(Ui.icon(new ItemStack(Items.WRITABLE_BOOK)).size(20),
+                    Ui.heading("Job details")).gap(5));
+            editor.add(Ui.textField(title).placeholder("Job title")
+                    .maxLength(BoardRequest.MAX_TITLE_CHARS).width(inputWidth));
+            editor.add(Ui.textField(description).placeholder("Optional details")
+                    .maxLength(BoardRequest.MAX_DESCRIPTION_CHARS).width(inputWidth));
+            editor.add(jobIconPicker(inputWidth));
             editor.add(centeredRow(
-                    verticalField("Reward ($)", reward, Math.max(43, inputWidth / 2 - 4)),
-                    verticalField("Lifetime (min)", lifetime, Math.max(43, inputWidth / 2 - 4))
+                    compactNumericCard(new ItemStack(Items.EMERALD), "Reward $",
+                            reward, Math.max(48, inputWidth / 2 - 15)),
+                    compactNumericCard(new ItemStack(Items.CLOCK), "Lifetime",
+                            lifetime, Math.max(48, inputWidth / 2 - 15))
+            ).gap(5));
+            editor.add(Ui.divider());
+            editor.add(centeredRow(
+                    Ui.icon(new ItemStack(Items.CHEST)).size(18),
+                    Ui.heading("Objectives"),
+                    Ui.spacer(), Ui.button("+ Add", this::addObjectiveForm).small()
             ).gap(4));
+            editor.add(Ui.component(() -> {
+                List<ObjectiveForm> forms = objectiveForms.get();
+                return List.of(Ui.node("objective-builder",
+                        Integer.toString(System.identityHashCode(forms)),
+                        () -> Ui.column(forms.stream().map(this::objectiveRow)
+                                .toArray(UIComponent[]::new)).gap(4)));
+            }));
             editor.add(Ui.divider());
-            editor.add(centeredRow(Ui.heading("Objectives"), Ui.spacer(),
-                    Ui.button("+ Add", this::addObjectiveForm).small()).gap(3));
-            editor.add(Ui.list(objectiveForms, this::objectiveRow)
-                    .itemHeight(52).gap(4).height(132));
-            editor.add(Ui.text("Choose a type, target item/entity and quantity."));
-            editor.add(Ui.divider());
-            editor.add(Ui.switcher(advancedCreate)
-                    .when(true, () -> Ui.button("Hide advanced",
-                            () -> advancedCreate.set(false)).primary().small())
-                    .when(false, () -> Ui.button("Audience & progression",
-                            () -> advancedCreate.set(true)).small()));
+            editor.add(centeredRow(
+                    Ui.component(() -> {
+                        boolean publicJob = publicAccess.get();
+                        return List.of(Ui.node("audience-chip", String.valueOf(publicJob),
+                                () -> Ui.badge(Component.literal(publicJob ? "PUBLIC" : "RESTRICTED"),
+                                        publicJob ? Badge.Variant.SUCCESS : Badge.Variant.WARNING)));
+                    }),
+                    Ui.spacer(),
+                    Ui.switcher(advancedCreate)
+                            .when(true, () -> Ui.button("Hide rules",
+                                    () -> advancedCreate.set(false)).small())
+                            .when(false, () -> Ui.button("Access rules",
+                                    () -> advancedCreate.set(true)).small())
+            ).gap(4));
             editor.add(Ui.component(() -> {
                 boolean expanded = advancedCreate.get();
                 return List.of(Ui.node("advanced-create", String.valueOf(expanded), () ->
-                        expanded ? advancedAudienceForm(inputWidth)
-                                : Ui.text("Public by default; expand for restrictions.")));
+                        expanded ? advancedAudienceForm(inputWidth) : Ui.spacer().height(1)));
             }));
-
-            UIComponent form = Ui.card(
-                    Ui.scroll(Ui.column(editor.toArray(UIComponent[]::new)).gap(6))
-                            .height(panelHeight - 8)
+            UIComponent formPanel = Ui.card(
+                    Ui.scroll(Ui.column(editor.toArray(UIComponent[]::new)).gap(5))
+                            .height(Math.max(64, panelHeight - 8))
             ).padding(4).height(panelHeight).width(editorWidth);
             UIComponent preview = Ui.component(() -> {
-                // Depend on each live field, so typing updates the preview.
                 String name = title.get(), desc = description.get(), item = icon.get(),
                         payment = reward.get(), minutes = lifetime.get();
                 boolean isPublic = publicAccess.get();
@@ -840,11 +890,55 @@ public final class BountyBoardClient {
                 return List.of(Ui.node("create-preview", key.toString(),
                         () -> createPreview(panelHeight)));
             }).height(panelHeight).width(previewWidth);
-
             return availableWidth >= 215
-                    ? centeredRow(form, preview).gap(6).height(panelHeight)
-                    : Ui.scroll(Ui.column(form.height(170), preview.height(150)).gap(5))
+                    ? centeredRow(formPanel, preview).gap(6).height(panelHeight)
+                    : Ui.scroll(Ui.column(formPanel.height(170), preview.height(150)).gap(5))
                             .height(panelHeight);
+        }
+
+        private UIComponent compactNumericCard(ItemStack sprite, String label,
+                                               Signal<String> field, int width) {
+            return Ui.card(Ui.column(
+                    centeredRow(Ui.icon(sprite).size(16),
+                            Ui.text(label).nowrap().ellipsis(true)).gap(3),
+                    Ui.textField(field).numeric().width(width)
+            ).gap(4)).padding(4);
+        }
+
+        private UIComponent jobIconPicker(int width) {
+            return Ui.column(
+                    centeredRow(
+                            Ui.icon(new ItemStack(Items.ITEM_FRAME)).size(16),
+                            Ui.text("Job icon"), Ui.spacer(),
+                            Ui.button("Held", () -> useHeldItem(icon, quickIcon)).small()
+                                    .tooltip("Use the item in your main hand"),
+                            Ui.button("ID", () -> customIconEditor.set(!customIconEditor.get()))
+                                    .ghost().small().tooltip("Enter a custom item ID")
+                    ).gap(3),
+                    centeredRow(
+                            Ui.component(() -> {
+                                String target = icon.get();
+                                return List.of(Ui.node("draft-icon", target,
+                                        () -> OrderItemIcons.icon(target).size(22)));
+                            }).width(23).height(23),
+                            Ui.select(quickIcon)
+                                    .option("Pick icon...", "")
+                                    .option(Component.literal("Iron Ingot"), "minecraft:iron_ingot",
+                                            OrderItemIcons.icon("minecraft:iron_ingot"))
+                                    .option(Component.literal("Oak Log"), "minecraft:oak_log",
+                                            OrderItemIcons.icon("minecraft:oak_log"))
+                                    .option(Component.literal("Paper"), "minecraft:paper",
+                                            OrderItemIcons.icon("minecraft:paper"))
+                                    .option(Component.literal("Emerald"), "minecraft:emerald",
+                                            OrderItemIcons.icon("minecraft:emerald"))
+                                    .onChange(chosen -> { if (!chosen.isBlank()) icon.set(chosen); })
+                                    .width(Math.max(75, width - 31))
+                    ).gap(4),
+                    Ui.switcher(customIconEditor)
+                            .when(true, () -> Ui.textField(icon)
+                                    .placeholder("minecraft:item_name").width(width))
+                            .when(false, () -> Ui.spacer().height(1))
+            ).gap(3);
         }
 
         private UIComponent createPreview(int height) {
