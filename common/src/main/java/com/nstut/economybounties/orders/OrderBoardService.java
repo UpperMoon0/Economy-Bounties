@@ -10,7 +10,10 @@ import com.nstut.economybounties.core.DefaultBountyService;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -416,7 +419,15 @@ public final class OrderBoardService {
         try {
             Files.createDirectories(path.getParent());
             Path temp = path.resolveSibling(path.getFileName() + ".tmp");
-            Files.writeString(temp,GSON.toJson(root),StandardCharsets.UTF_8);
+            // Durable write-ahead claim lock: flush contents before atomically
+            // replacing the slot state. Otherwise a power loss may persist the
+            // generated bounty but lose its associated claimant lock.
+            try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                ByteBuffer content = ByteBuffer.wrap(GSON.toJson(root).getBytes(StandardCharsets.UTF_8));
+                while (content.hasRemaining()) channel.write(content);
+                channel.force(true);
+            }
             try { Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE); }
             catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
                 Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING);
