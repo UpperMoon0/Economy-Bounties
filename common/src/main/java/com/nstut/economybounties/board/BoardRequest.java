@@ -33,6 +33,8 @@ public record BoardRequest(
 
     public enum Action {
         REFRESH,
+        ACCEPT_ORDER,
+        DISCARD_ORDER,
         ROLL,
         ACCEPT_GENERATED,
         CANCEL_GENERATED,
@@ -100,6 +102,13 @@ public record BoardRequest(
 
     public static BoardRequest bounty(Action action, String id) {
         return new BoardRequest(action, id, "", "", "", "", -1, null);
+    }
+
+    /** board id + slot + expected offer UUID allow the server to reject stale clicks. */
+    public static BoardRequest order(Action action, String boardId, int slot, String offerId) {
+        if (action != Action.ACCEPT_ORDER && action != Action.DISCARD_ORDER)
+            throw new IllegalArgumentException("Not an order action");
+        return new BoardRequest(action, offerId, "", boardId, "", "", slot, null);
     }
 
     public static BoardRequest roll(String poolId) {

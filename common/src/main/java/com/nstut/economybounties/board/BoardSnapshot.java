@@ -8,14 +8,30 @@ public record BoardSnapshot(
         List<PoolEntry> pools,
         List<BountyEntry> generated,
         List<BountyEntry> posted,
-        String notice
+        String notice,
+        List<OrderEntry> orders
 ) {
     public BoardSnapshot {
         pools = List.copyOf(pools == null ? List.of() : pools);
         generated = List.copyOf(generated == null ? List.of() : generated);
         posted = List.copyOf(posted == null ? List.of() : posted);
         notice = notice == null ? "" : notice;
+        orders = List.copyOf(orders == null ? List.of() : orders);
     }
+
+    /** Source-compatible constructor for legacy clients and unit tests. */
+    public BoardSnapshot(List<PoolEntry> pools, List<BountyEntry> generated,
+                         List<BountyEntry> posted, String notice) {
+        this(pools, generated, posted, notice, List.of());
+    }
+
+    /** Server-generated, bounded and read-only order slot preview. */
+    public record OrderEntry(
+            String board, String scope, int slot, String offerId, String title,
+            String item, long quantity, String reward, String rarity,
+            String timer, String status, long expiresAt, long restocksAt,
+            boolean canAccept, boolean canDiscard
+    ) { }
 
     public record PoolEntry(String id) {
         public PoolEntry { id = requireText(id, "id"); }

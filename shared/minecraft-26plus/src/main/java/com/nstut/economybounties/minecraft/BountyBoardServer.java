@@ -4,6 +4,7 @@ import com.nstut.economybounties.api.*;
 import com.nstut.economybounties.board.BoardRequest;
 import com.nstut.economybounties.board.BoardSnapshot;
 import com.nstut.economybounties.network.BountyNetwork;
+import com.nstut.economybounties.orders.OrderBoardService;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.math.BigDecimal;
@@ -40,6 +41,8 @@ public final class BountyBoardServer {
         try {
             notice = switch (request.action()) {
                 case REFRESH -> "";
+                case ACCEPT_ORDER -> acceptOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
+                case DISCARD_ORDER -> discardOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
                 case ROLL -> roll(player, request.poolId());
                 case ACCEPT_GENERATED -> generatedAccept(player, request.bountyId());
                 case CANCEL_GENERATED -> generatedCancel(player, request.bountyId());
@@ -75,7 +78,31 @@ public final class BountyBoardServer {
                 .map(view -> postedEntry(player.getUUID(), view))
                 .sorted(Comparator.comparing(BoardSnapshot.BountyEntry::expiresAtEpochSecond))
                 .toList();
-        return new BoardSnapshot(pools, generated, posted, notice);
+        int playerLevel = MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID());
+        List<BoardSnapshot.OrderEntry> orders = EconomyBountiesRuntime.ordersFor(player.getUUID(), playerLevel, now)
+                .stream().map(BountyBoardServer::orderEntry).toList();
+        return new BoardSnapshot(pools, generated, posted, notice, orders);
+    }
+
+    private static BoardSnapshot.OrderEntry orderEntry(OrderBoardService.Card card) {
+        return new BoardSnapshot.OrderEntry(card.board(), card.scope(), card.slot(),
+                card.offerId(), card.title(), card.item(), card.quantity(), card.reward(),
+                card.rarity(), card.timer(), card.status(), card.expiresAt(), card.restocksAt(),
+                card.canAccept(), card.canDiscard());
+    }
+
+    private static String acceptOrder(ServerPlayer player, String board, int slot, String offerId) {
+        return EconomyBountiesRuntime.orders().accept(player.getUUID(),
+                MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID()),
+                NamespacedId.parse(required(board, "order board")), slot,
+                uuid(offerId), Instant.now());
+    }
+
+    private static String discardOrder(ServerPlayer player, String board, int slot, String offerId) {
+        return EconomyBountiesRuntime.orders().discard(player.getUUID(),
+                MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID()),
+                NamespacedId.parse(required(board, "order board")), slot,
+                uuid(offerId), Instant.now());
     }
 
     private static String roll(ServerPlayer player, String poolId) {
