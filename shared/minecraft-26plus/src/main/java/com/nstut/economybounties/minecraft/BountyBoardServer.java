@@ -71,10 +71,16 @@ public final class BountyBoardServer {
         List<BoardSnapshot.PoolEntry> pools = EconomyBountiesRuntime.pools().keySet().stream()
                 .map(NamespacedId::toString).sorted().map(BoardSnapshot.PoolEntry::new).toList();
         List<BoardSnapshot.BountyEntry> generated = EconomyBountiesRuntime.generatedFor(player.getUUID(), now).stream()
+                .sorted(Comparator.comparingInt((BountyView view) -> terminalGenerated(view.status()) ? 1 : 0)
+                        .thenComparing(BountyView::offeredAt, Comparator.reverseOrder()))
+                .limit(40)
                 .map(BountyBoardServer::generatedEntry)
                 .sorted(Comparator.comparing(BoardSnapshot.BountyEntry::expiresAtEpochSecond))
                 .toList();
         List<BoardSnapshot.BountyEntry> posted = EconomyBountiesRuntime.postedFor(player.getUUID(), now).stream()
+                .sorted(Comparator.comparingInt((PostedBountyView view) -> terminalPosted(view.status()) ? 1 : 0)
+                        .thenComparing(PostedBountyView::createdAt, Comparator.reverseOrder()))
+                .limit(24)
                 .map(view -> postedEntry(player.getUUID(), view))
                 .sorted(Comparator.comparing(BoardSnapshot.BountyEntry::expiresAtEpochSecond))
                 .toList();
@@ -82,6 +88,16 @@ public final class BountyBoardServer {
         List<BoardSnapshot.OrderEntry> orders = EconomyBountiesRuntime.ordersFor(player.getUUID(), playerLevel, now)
                 .stream().map(BountyBoardServer::orderEntry).toList();
         return new BoardSnapshot(pools, generated, posted, notice, orders);
+    }
+
+    /** Keep active work first while bounding board packets and scroll virtualization. */
+    private static boolean terminalGenerated(BountyStatus status) {
+        return status == BountyStatus.CLAIMED || status == BountyStatus.EXPIRED || status == BountyStatus.CANCELLED;
+    }
+
+    private static boolean terminalPosted(PostedBountyStatus status) {
+        return status == PostedBountyStatus.CLAIMED || status == PostedBountyStatus.EXPIRED
+                || status == PostedBountyStatus.CANCELLED;
     }
 
     private static BoardSnapshot.OrderEntry orderEntry(OrderBoardService.Card card) {
