@@ -13,6 +13,7 @@ import com.nstut.openui.state.Signals;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,7 +31,8 @@ public final class BountyBoardClient {
     private static final class BountyBoardScreen extends UiScreen {
         private static final int MAX_OBJECTIVES = 16;
 
-        private final Signal<String> tab = Signals.of("Generated");
+        private final Signal<String> tab = Signals.of("Orders");
+        private final Signal<List<BoardSnapshot.OrderEntry>> orders = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.PoolEntry>> pools = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> generated = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> posted = Signals.of(List.of());
@@ -60,6 +62,7 @@ public final class BountyBoardClient {
             if (snapshot == null) return;
             Signals.batch(() -> {
                 pools.set(snapshot.pools());
+                orders.set(snapshot.orders() == null ? List.of() : snapshot.orders());
                 generated.set(snapshot.generated());
                 posted.set(snapshot.posted());
                 notice.set(snapshot.notice());
@@ -81,12 +84,102 @@ public final class BountyBoardClient {
                             Ui.button("Close", this::onClose).ghost().small()
                     ).gap(6),
                     Ui.text(notice),
-                    Ui.tabs(tab).tab("Generated", "Generated").tab("Posted", "Posted").tab("Create", "Create"),
+                    Ui.tabs(tab).tab("Orders", "Orders").tab("Generated", "Contracts")
+                            .tab("Posted", "Posted").tab("Create", "Create"),
                     Ui.switcher(tab)
+                            .when("Orders", this::ordersPanel)
                             .when("Generated", this::generatedPanel)
                             .when("Posted", this::postedPanel)
                             .when("Create", this::createPanel)
             ).gap(7)).padding(10).elevated(true);
+        }
+
+        /**
+         * Automatic orders are a curated, server-owned storefront. No manual Roll
+         * button is needed. A slot is locked on acceptance before a bounty grant.
+         */
+        private UIComponent ordersPanel() {
+            return Ui.column(
+                    centeredRow(Ui.heading("Dispatch board"), Ui.spacer(),
+                            Ui.badge("AUTO-RESTOCK")),
+                    Ui.text("Six personal offers, shared town dispatches, and timed specials."),
+                    Ui.list(orders, this::orderCard).height(196),
+                    centeredRow(
+                            Ui.text("Taken orders move to Contracts. Shared offers are first-come."),
+                            Ui.spacer(),
+                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
+                    ).gap(4)
+            ).gap(5);
+        }
+
+        private UIComponent orderCard(BoardSnapshot.OrderEntry order) {
+            boolean ready = order.canAccept();
+            boolean isWaiting = "RESTOCKING".equals(order.status()) || "CLAIMED".equals(order.status());
+            String kind = "SHARED".equals(order.scope()) ? "TOWN" : "PERSONAL";
+            String badge = order.rarity().isBlank() ? kind : order.rarity().toUpperCase(java.util.Locale.ROOT) + " / " + kind;
+            String headline = isWaiting ? "Slot " + (order.slot() + 1) + " - " + order.status()
+                    : order.title();
+            List<UIComponent> lines = new ArrayList<>();
+            lines.add(centeredRow(Ui.heading(headline), Ui.spacer(), Ui.badge(badge)).gap(4));
+            if (!isWaiting) {
+                lines.add(centeredRow(
+                        Ui.text("Deliver " + order.quantity() + " " + readableItem(order.item())),
+                        Ui.spacer(), Ui.badge("$" + order.reward())).gap(4));
+            }
+            List<UIComponent> controls = new ArrayList<>();
+            controls.add(Ui.text(orderTime(order)));
+            controls.add(Ui.spacer());
+            if (ready) {
+                controls.add(Ui.button("Accept", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                        BoardRequest.Action.ACCEPT_ORDER, order.board(), order.slot(), order.offerId())))
+                        .primary().small());
+                if (order.canDiscard()) {
+                    controls.add(Ui.button("Discard", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                            BoardRequest.Action.DISCARD_ORDER, order.board(), order.slot(), order.offerId())))
+                            .ghost().small());
+                }
+            } else if ("TAKEN".equals(order.status())) {
+                controls.add(Ui.button("View contract", () -> tab.set("Generated")).small());
+            }
+            lines.add(centeredRow(controls.toArray(UIComponent[]::new)).gap(5));
+            return Ui.card(Ui.column(lines.toArray(UIComponent[]::new)).gap(4)).padding(6);
+        }
+
+        private static String readableItem(String id) {
+            if (id == null || id.isBlank()) return "items";
+            String value = id.substring(id.indexOf(':') + 1).replace('_', ' ');
+            return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+        }
+
+        private static String orderTime(BoardSnapshot.OrderEntry order) {
+            long remaining = order.expiresAt() - Instant.now().getEpochSecond();
+            if ("RESTOCKING".equals(order.status()) || "TAKEN".equals(order.status())
+                    || "CLAIMED".equals(order.status())) {
+                long restock = Math.max(0, order.restocksAt() - Instant.now().getEpochSecond());
+                return "New order in " + formatTime(restock);
+            }
+            return switch (order.timer()) {
+                case "NONE" -> "No delivery deadline";
+                case "ACCEPT" -> "Deadline begins on acceptance";
+                default -> remaining > 0 ? "Offer expires in " + formatTime(remaining) : "Offer expired";
+            };
+        }
+
+        private static String formatTime(long seconds) {
+            if (seconds >= 86400) return (seconds / 86400) + "d " + ((seconds % 86400) / 3600) + "h";
+            if (seconds >= 3600) return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
+            return (seconds / 60) + "m " + (seconds % 60) + "s";
+        }
+
+        private int refreshTicks;
+        @Override
+        public void tick() {
+            super.tick();
+            // A bounded server refresh keeps time windows and restocks current
+            // without a per-frame packet or a client-side claim decision.
+            if (++refreshTicks % 400 == 0) {
+                BountyNetwork.sendRequest(BoardRequest.refresh());
+            }
         }
 
         private UIComponent generatedPanel() {
