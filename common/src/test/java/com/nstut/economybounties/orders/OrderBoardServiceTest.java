@@ -155,6 +155,44 @@ class OrderBoardServiceTest {
     }
 
     @Test
+    void crashedPendingGrantIsReplayedForTheOriginalClaimantOnly() {
+        var board = config(OrderBoardDefinition.Scope.SHARED,OrderBoardDefinition.Timer.ACCEPT,1);
+        ObjectiveRegistry invalidRegistry = new ObjectiveRegistry();
+        DefaultBountyService unavailable = new DefaultBountyService(ProgressionProvider.constant(0),
+                context -> RewardProvider.PayoutResult.success("unused"), invalidRegistry,
+                new JsonDirectoryBountyStateStore(temp.resolve("players")),8);
+        var before = new OrderBoardService(temp,42,unavailable);
+        before.replaceDefinitions(List.of(board));
+        var preview = before.list(A,0,NOW).get(0);
+        assertTrue(before.accept(A,0,board.id(),0,UUID.fromString(preview.offerId()),NOW)
+                .contains("pending"));
+        assertTrue(before.accept(B,0,board.id(),0,UUID.fromString(preview.offerId()),NOW)
+                .contains("Another player"));
+        var recovered = service(temp,new AtomicInteger());
+        var after = new OrderBoardService(temp,42,recovered);
+        after.replaceDefinitions(List.of(board));
+        assertFalse(after.list(A,0,NOW.plusSeconds(10)).get(0).canAccept());
+        assertEquals(1,recovered.list(A,NOW.plusSeconds(10)).size());
+        assertEquals(0,recovered.list(B,NOW.plusSeconds(10)).size());
+    }
+
+    @Test
+    void expiredPendingRushClaimIsReleasedAfterRestock() {
+        var board = config(OrderBoardDefinition.Scope.SHARED,OrderBoardDefinition.Timer.OFFER,1);
+        var unavailable = new DefaultBountyService(ProgressionProvider.constant(0),
+                context -> RewardProvider.PayoutResult.success("unused"), new ObjectiveRegistry(),
+                new JsonDirectoryBountyStateStore(temp.resolve("players")),8);
+        var manager = new OrderBoardService(temp,42,unavailable);
+        manager.replaceDefinitions(List.of(board));
+        var preview = manager.list(A,0,NOW).get(0);
+        assertTrue(manager.accept(A,0,board.id(),0,UUID.fromString(preview.offerId()),NOW).contains("pending"));
+        assertEquals("RESTOCKING",manager.list(B,0,NOW.plusSeconds(121)).get(0).status());
+        var refreshed = manager.list(B,0,NOW.plusSeconds(126)).get(0);
+        assertTrue(refreshed.canAccept());
+        assertNotEquals(preview.offerId(),refreshed.offerId());
+    }
+
+    @Test
     void eventWindowIsEnforcedWithoutDeletingExistingState() {
         var earlier = config(OrderBoardDefinition.Scope.PERSONAL,OrderBoardDefinition.Timer.NONE,1);
         var event = new OrderBoardDefinition(earlier.id(),earlier.scope(),earlier.slots(),

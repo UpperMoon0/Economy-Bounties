@@ -113,6 +113,13 @@ public final class OrderBoardService {
         Slot slot = state.slots.get(index);
         if (slot.offer == null || !slot.offer.equals(offer)) return "This order has rotated; refresh the board";
         if (slot.claimant != null && !slot.claimant.equals(player)) return "Another player already accepted this order";
+        if (slot.claimant == null) {
+            long outstanding = generated.list(player, now).stream()
+                    .filter(view -> view.status() == BountyStatus.OFFERED
+                            || view.status() == BountyStatus.ACTIVE
+                            || view.status() == BountyStatus.COMPLETED).count();
+            if (outstanding >= 24) return "Finish or claim existing contracts before accepting more orders";
+        }
         if (slot.claimant != null && slot.granted) return "Order already accepted; see Generated contracts";
         if (slot.claimant == null) {
             slot.claimant = player;
