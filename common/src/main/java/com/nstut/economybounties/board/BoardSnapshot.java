@@ -30,7 +30,7 @@ public record BoardSnapshot(
             String board, String scope, int slot, String offerId, String title,
             String item, long quantity, String reward, String rarity,
             String timer, String status, long deadlineSeconds, long expiresAt, long restocksAt,
-            boolean canAccept, boolean canDiscard
+            boolean canAccept, boolean canDiscard, long inInventory
     ) { }
 
     public record PoolEntry(String id) {

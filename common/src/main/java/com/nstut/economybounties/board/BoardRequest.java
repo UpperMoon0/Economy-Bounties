@@ -34,6 +34,7 @@ public record BoardRequest(
     public enum Action {
         REFRESH,
         ACCEPT_ORDER,
+        FULFILL_ORDER,
         DISCARD_ORDER,
         ROLL,
         ACCEPT_GENERATED,
@@ -106,7 +107,8 @@ public record BoardRequest(
 
     /** board id + slot + expected offer UUID allow the server to reject stale clicks. */
     public static BoardRequest order(Action action, String boardId, int slot, String offerId) {
-        if (action != Action.ACCEPT_ORDER && action != Action.DISCARD_ORDER)
+        if (action != Action.ACCEPT_ORDER && action != Action.FULFILL_ORDER
+                && action != Action.DISCARD_ORDER)
             throw new IllegalArgumentException("Not an order action");
         return new BoardRequest(action, offerId, "", boardId, "", "", slot, null);
     }

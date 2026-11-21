@@ -290,8 +290,15 @@ public final class OrderBoardService {
         return true;
     }
 
+    /** Stable external identifier for a locked automatic offer's generated bounty. */
+    public static UUID issuedBountyId(UUID offerId, UUID player) {
+        Objects.requireNonNull(offerId, "offerId");
+        Objects.requireNonNull(player, "player");
+        return UUID.nameUUIDFromBytes((offerId + ":" + player).getBytes(StandardCharsets.UTF_8));
+    }
+
     private static UUID instanceId(Slot slot, UUID player) {
-        return UUID.nameUUIDFromBytes((slot.offer + ":" + player).getBytes(StandardCharsets.UTF_8));
+        return issuedBountyId(slot.offer, player);
     }
 
     private static void clear(Slot slot, long restockAt) {
