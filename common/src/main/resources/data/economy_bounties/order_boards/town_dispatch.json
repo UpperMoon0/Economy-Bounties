@@ -1,0 +1,78 @@
+{
+  "id": "economy_bounties:town_dispatch",
+  "scope": "shared",
+  "slots": 4,
+  "restock_seconds": 600,
+  "rotation_seconds": 86400,
+  "allow_discard": false,
+  "minimum_reward": "5.00",
+  "maximum_reward": "1000.00",
+  "inputs": [
+    {
+      "item": "minecraft:oak_log",
+      "quantity": {
+        "min": 24,
+        "max": 48
+      },
+      "weight": 6,
+      "reference_price": "4.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:iron_ingot",
+      "quantity": {
+        "min": 8,
+        "max": 20
+      },
+      "weight": 4,
+      "reference_price": "12.00",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:wheat",
+      "quantity": {
+        "min": 48,
+        "max": 96
+      },
+      "weight": 5,
+      "reference_price": "2.50",
+      "min_level": 0
+    },
+    {
+      "item": "minecraft:copper_ingot",
+      "quantity": {
+        "min": 16,
+        "max": 32
+      },
+      "weight": 3,
+      "reference_price": "6.00",
+      "min_level": 0
+    }
+  ],
+  "rewards": [
+    {
+      "id": "public",
+      "title": "Town-wide dispatch",
+      "rarity": "Uncommon",
+      "weight": 85,
+      "multiplier": "1.40",
+      "bonus": "20.00",
+      "timer": "offer",
+      "duration_seconds": 7200,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    },
+    {
+      "id": "express",
+      "title": "Express caravan",
+      "rarity": "Rare",
+      "weight": 15,
+      "multiplier": "2.00",
+      "bonus": "50.00",
+      "timer": "accept",
+      "duration_seconds": 3600,
+      "start_hour_utc": 0,
+      "end_hour_utc": 0
+    }
+  ]
+}
