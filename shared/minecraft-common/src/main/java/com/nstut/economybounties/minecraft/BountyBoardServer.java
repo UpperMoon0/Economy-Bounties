@@ -87,7 +87,7 @@ public final class BountyBoardServer {
     private static BoardSnapshot.OrderEntry orderEntry(OrderBoardService.Card card) {
         return new BoardSnapshot.OrderEntry(card.board(), card.scope(), card.slot(),
                 card.offerId(), card.title(), card.item(), card.quantity(), card.reward(),
-                card.rarity(), card.timer(), card.status(), card.expiresAt(), card.restocksAt(),
+                card.rarity(), card.timer(), card.status(), card.deadlineSeconds(), card.expiresAt(), card.restocksAt(),
                 card.canAccept(), card.canDiscard());
     }
 

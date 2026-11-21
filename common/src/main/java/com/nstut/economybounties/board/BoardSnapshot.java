@@ -29,7 +29,7 @@ public record BoardSnapshot(
     public record OrderEntry(
             String board, String scope, int slot, String offerId, String title,
             String item, long quantity, String reward, String rarity,
-            String timer, String status, long expiresAt, long restocksAt,
+            String timer, String status, long deadlineSeconds, long expiresAt, long restocksAt,
             boolean canAccept, boolean canDiscard
     ) { }
 

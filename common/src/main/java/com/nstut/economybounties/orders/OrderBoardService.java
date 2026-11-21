@@ -56,7 +56,7 @@ public final class OrderBoardService {
     public record Card(
             String board, String scope, int slot, String offerId, String title,
             String item, long quantity, String reward, String rarity, String timer,
-            String status, long expiresAt, long restocksAt,
+            String status, long deadlineSeconds, long expiresAt, long restocksAt,
             boolean canAccept, boolean canDiscard
     ) { }
 
@@ -96,7 +96,7 @@ public final class OrderBoardService {
                         slot.offer == null ? "" : slot.offer.toString(),
                         slot.title, slot.item, slot.quantity, slot.reward.toPlainString(),
                         slot.rarity, slot.timer.name(), status,
-                        slot.expires, slot.restockAt, available,
+                        slot.duration, slot.expires, slot.restockAt, available,
                         available && board.allowDiscard() && board.scope() == OrderBoardDefinition.Scope.PERSONAL));
             }
         }
