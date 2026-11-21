@@ -62,8 +62,8 @@ Objective, progress-scope and reward metadata is namespaced and immutable at API
 
 ## Economy integration
 
-Economy Bounties requires Economy **0.0.22 or later**. `EconomyMoneyAdapter` uses only the supported top-level `com.nstut.economy.api` package, including `EconomyApi`, account interfaces, namespaced transaction causes and structured transaction metadata. It must never import `com.nstut.economy.api.internal`, `com.nstut.economy.core`, `trading`, `data`, or loader-specific implementation packages.
+Economy Bounties requires Economy **0.0.23 or later**. `EconomyMoneyAdapter` uses only the supported top-level `com.nstut.economy.api` package, including `EconomyApi`, account interfaces, namespaced transaction causes and structured transaction metadata. It must never import `com.nstut.economy.api.internal`, `com.nstut.economy.core`, `trading`, `data`, or loader-specific implementation packages.
 
-Runtime metadata uses 0.0.22 as the minimum version and accepts later compatible releases. Client installations require OpenUI MC 0.0.16 or later.
+Runtime metadata uses 0.0.23 as the minimum version and accepts later compatible releases. Client installations require OpenUI MC 0.0.16 or later.
 
 CI checks forward compatibility against current `Economy/main` without granting Bounties source-level access to Economy internals: CI publishes Economy's public Maven artifacts to the local repository first, verifies the expected artifacts exist, and then resolves/tests/builds Economy Bounties through those coordinates. This catches both stable-API drift and broken transitive publication metadata.
