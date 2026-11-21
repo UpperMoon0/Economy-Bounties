@@ -236,7 +236,19 @@ public final class OrderBoardService {
             case ACCEPT -> now.getEpochSecond() + slot.duration;
             case OFFER -> slot.created + slot.duration;
         };
-        if (now.getEpochSecond() >= expires) return false;
+        if (now.getEpochSecond() >= expires) {
+            // A crash during lock->grant may leave a pending order after its
+            // offer deadline. If the bounty was granted, preserve it; if not,
+            // release the stale lock after cooldown instead of blocking forever.
+            if (generated.get(slot.claimant, instance, now).isPresent()) {
+                slot.granted = true;
+                save(board, state);
+                return true;
+            }
+            clear(slot, now.getEpochSecond() + board.restock().toSeconds());
+            save(board, state);
+            return false;
+        }
         BountyDefinition bounty = new BountyDefinition(
                 NamespacedId.parse("economy_bounties:order_" + slot.offer.toString().replace("-", "")),
                 NamespacedId.parse("economy_bounties:orders"),

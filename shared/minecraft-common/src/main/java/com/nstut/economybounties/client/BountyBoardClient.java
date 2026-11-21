@@ -114,7 +114,7 @@ public final class BountyBoardClient {
                     Ui.text("Orders restock automatically. Rare deliveries earn more."),
                     Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
                             .tab("Town", "Town").tab("Special", "Special"),
-                    Ui.list(visibleOrders, this::orderCard).height(161),
+                    Ui.list(visibleOrders, this::orderCard).height(Math.max(92, uiHeight() - 178)),
                     centeredRow(
                             Ui.text("Accepted orders appear in Contracts."),
                             Ui.spacer(),
