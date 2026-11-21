@@ -5,8 +5,8 @@ Automatic Orders replace player-initiated system bounty rolling. Accepted automa
 ## Player experience
 
 - **Orders** is the initial tab when opening the Bounty Board block or `/bounties`.
-- **All / Personal / Town / Special** filters avoid mixing all 14+ offers into one list. Entries show the requested item count, reward, rarity, delivery policy, and actions.
-- **Personal** offers are per-player and can be discarded for a cooldown. **Town** offers are server-wide and can be claimed by exactly one player; stale attempts fail. **Daily Special** and **Harvest Festival** demonstrate recurring daily and bounded event pools.
+- **All / Personal / Global** scopes are independent of **Normal / Special** type tags. A special may be personal or global. Search, status, sort, Ready-only, and Grid/List controls refine the browser without requesting new server-generated offers.
+- **Personal** offers are per-player and can be discarded for a cooldown. **Global** offers are server-wide and can be claimed by exactly one player; stale attempts fail. **Daily Special** and **Harvest Festival** demonstrate recurring daily and bounded event pools.
 - Each available order previews the number of matching items currently in the player's server inventory. When the entire delivery is in the bag, **Deliver now** completes acceptance, scoped inventory consumption, and payout in one click. If short on items, **Accept** tracks the job under **Contracts**. A payout failure after delivery remains retryable in **Contracts**.
 - Accept/Deliver sends the board ID, slot index, and current offer UUID. The server checks all three against persisted state. No client-supplied inventory counts, reward amounts or completed objectives are trusted.
 - A slot is **not** restocked when the player accepts. It restocks after the accepted contract is *claimed, cancelled or expired* and the configured cooldown passes.
