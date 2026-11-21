@@ -114,12 +114,7 @@ public final class BountyBoardClient {
                     Ui.text("Orders restock automatically. Rare deliveries earn more."),
                     Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
                             .tab("Town", "Town").tab("Special", "Special"),
-                    Ui.list(visibleOrders, this::orderCard).height(Math.max(92, uiHeight() - 178)),
-                    centeredRow(
-                            Ui.text("Accepted orders appear in Contracts."),
-                            Ui.spacer(),
-                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
-                    ).gap(4)
+                    Ui.list(visibleOrders, this::orderCard).height(Math.max(120, uiHeight() - 130))
             ).gap(5);
         }
 
@@ -136,11 +131,20 @@ public final class BountyBoardClient {
                 lines.add(centeredRow(
                         Ui.text("Deliver " + order.quantity() + " " + readableItem(order.item())),
                         Ui.spacer(), Ui.badge("$" + order.reward())).gap(4));
+                if (ready) {
+                    long owned = order.inInventory();
+                    lines.add(centeredRow(Ui.text("In inventory: " + owned + "/" + order.quantity()),
+                            Ui.spacer(), Ui.badge(owned >= order.quantity() ? "READY" : "NEED ITEMS")).gap(4));
+                }
             }
             List<UIComponent> controls = new ArrayList<>();
-            controls.add(Ui.text(orderTime(order)));
-            controls.add(Ui.spacer());
+            lines.add(Ui.text(orderTime(order)));
             if (ready) {
+                if (order.inInventory() >= order.quantity()) {
+                    controls.add(Ui.button("Deliver now", () -> BountyNetwork.sendRequest(BoardRequest.order(
+                            BoardRequest.Action.FULFILL_ORDER, order.board(), order.slot(), order.offerId())))
+                            .success().small());
+                }
                 controls.add(Ui.button("Accept", () -> BountyNetwork.sendRequest(BoardRequest.order(
                         BoardRequest.Action.ACCEPT_ORDER, order.board(), order.slot(), order.offerId())))
                         .primary().small());
