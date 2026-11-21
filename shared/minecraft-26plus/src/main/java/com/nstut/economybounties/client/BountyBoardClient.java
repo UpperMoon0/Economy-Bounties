@@ -207,7 +207,7 @@ public final class BountyBoardClient {
                     Ui.divider(),
                     navButton("Orders", "Orders"),
                     navButton("My Jobs", "Generated"),
-                    navButton(uiWidth() >= 410 ? "Player Jobs" : "Players", "Posted"),
+                    navButton(uiWidth() >= 410 ? "Player Jobs" : "Posts", "Posted"),
                     navButton("Post Job", "Create")
             ).gap(5)).width(side).height(height);
             UIComponent main = Ui.column(

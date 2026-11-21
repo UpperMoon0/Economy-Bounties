@@ -160,13 +160,13 @@ public final class BountyBoardServer {
         BountyView after = EconomyBountiesRuntime.generated().get(player.getUUID(), contract, Instant.now())
                 .orElse(null);
         if (after == null || after.status() != BountyStatus.COMPLETED)
-            return delivery + ". You can finish this order under Contracts.";
+            return delivery + ". You can finish this order under My Jobs.";
         BountyService.ClaimResult claimed = EconomyBountiesRuntime.generated().claim(
                 player.getUUID(), contract, Instant.now());
         return claimed.status() == BountyService.ClaimResult.Status.PAID
                 || claimed.status() == BountyService.ClaimResult.Status.ALREADY_CLAIMED
                 ? "Delivery complete. $" + card.reward() + " credited to your Economy account."
-                : "Delivery recorded. Reward is pending; claim it from Contracts. " + claimed.message();
+                : "Delivery recorded. Reward is pending; claim it from My Jobs. " + claimed.message();
     }
 
     private static String acceptOrder(ServerPlayer player, String board, int slot, String offerId) {
