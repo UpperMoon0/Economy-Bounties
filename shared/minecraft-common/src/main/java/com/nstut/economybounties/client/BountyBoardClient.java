@@ -167,13 +167,18 @@ public final class BountyBoardClient {
         private int sideWidth() { return uiWidth() >= 410 ? 84 : 62; }
         private int mainWidth() { return Math.max(130, uiWidth() - sideWidth() - 26); }
         private int mainHeight() { return Math.max(110, uiHeight() - 21); }
-        private int browserHeight() { return Math.max(92, mainHeight() - 91); }
+        // An explicit viewport is essential: OpenUI's VStack measures a
+        // SignalSwitcher using preferred (intrinsic) height, which is only one
+        // VirtualGrid row. Without a height on the switcher *and* its browser
+        // row, the outer card stays tall while all content stops halfway down.
+        private int contentHeight() { return Math.max(70, mainHeight() - 45); }
+        private int orderBrowserHeight() { return Math.max(50, contentHeight() - 56); }
+        private int bountyBrowserHeight() { return Math.max(50, contentHeight() - 29); }
 
         @Override protected UIComponent buildUI() {
             int side = sideWidth(), contentWidth = mainWidth(), height = mainHeight();
             UIComponent sidebar = Ui.scroll(Ui.column(
-                    Ui.text("BOUNTY").nowrap(),
-                    Ui.text("BOARD").nowrap(),
+                    Ui.text("BOUNTIES").nowrap(),
                     Ui.divider(),
                     navButton("Orders", "Orders"),
                     navButton("Contracts", "Generated"),
@@ -181,15 +186,29 @@ public final class BountyBoardClient {
                     navButton("Create", "Create")
             ).gap(5)).width(side).height(height);
             UIComponent main = Ui.column(
-                    centeredRow(Ui.heading("Bounty Board"), Ui.spacer(),
+                    centeredRow(
+                            Ui.component(() -> {
+                                String current = tab.get();
+                                String heading = switch (current) {
+                                    case "Generated" -> "Contracts";
+                                    case "Posted" -> "Posted bounties";
+                                    case "Create" -> "Create bounty";
+                                    default -> "Orders";
+                                };
+                                return List.of(Ui.node("active-tab-heading", current,
+                                        () -> Ui.heading(heading)));
+                            }),
+                            Ui.spacer(),
                             Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small(),
-                            Ui.button("X", this::onClose).ghost().small()).gap(4),
+                            Ui.button("Close", this::onClose).ghost().small()
+                    ).gap(4).height(24),
                     Ui.text(notice).height(11),
                     Ui.switcher(tab)
                             .when("Orders", this::ordersPanel)
                             .when("Generated", this::generatedPanel)
                             .when("Posted", this::postedPanel)
                             .when("Create", this::createPanel)
+                            .height(contentHeight())
             ).gap(5).width(contentWidth).height(height);
             return Ui.card(centeredRow(sidebar, main).gap(7))
                     .padding(7).elevated(true).height(uiHeight());
@@ -277,7 +296,7 @@ public final class BountyBoardClient {
          * button is needed. A slot is locked on acceptance before a bounty grant.
          */
         private UIComponent ordersPanel() {
-            int panelHeight = Math.max(92, browserHeight() - 49);
+            int panelHeight = orderBrowserHeight();
             int availableWidth = Math.max(145, mainWidth() - 10);
             int listWidth = Math.max(80, (availableWidth * 54) / 100);
             int detailWidth = Math.max(82, availableWidth - listWidth - 6);
@@ -307,34 +326,34 @@ public final class BountyBoardClient {
                     .width(listWidth).height(panelHeight);
             UIComponent rightBody = details.width(detailWidth);
             UIComponent main = mainWidth() >= 215
-                    ? centeredRow(browserBody, rightBody).gap(6)
+                    ? centeredRow(browserBody, rightBody).gap(6).height(panelHeight)
                     : Ui.scroll(Ui.column(browserBody.height(93), rightBody.height(160)).gap(5))
                             .height(panelHeight);
 
             return Ui.column(
                     centeredRow(
-                            Ui.textField(orderSearch).placeholder("Search item or order...").width(Math.max(85, mainWidth() - 152)),
-                            Ui.select(orderScope).option("All", "All").option("Personal", "Personal")
-                                    .option("Global", "Global").width(72),
-                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
-                    ).gap(4),
-                    centeredRow(
+                            Ui.textField(orderSearch).placeholder("Search item or order...")
+                                    .width(Math.max(80, mainWidth() - 206)),
+                            Ui.select(orderScope).option("All scopes", "All").option("Personal", "Personal")
+                                    .option("Global", "Global").width(92),
                             Ui.select(orderType).option("All types", "All").option("Normal", "Normal")
-                                    .option("Special", "Special").width(73),
-                            Ui.select(orderStatus).option("Any state", "All").option("Ready", "Ready")
+                                    .option("Special", "Special").width(92)
+                    ).gap(4).height(24),
+                    centeredRow(
+                            Ui.select(orderStatus).option("Any status", "All").option("Ready", "Ready")
                                     .option("Available", "Available").option("Taken", "Taken")
-                                    .option("Restocking", "Restocking").width(76),
+                                    .option("Restocking", "Restocking").width(106),
                             Ui.select(orderSort).option("Ready first", "Ready").option("Reward", "Reward")
-                                    .option("Soonest", "Time").option("Item A-Z", "Item").width(73),
+                                    .option("Soonest", "Time").option("Item A-Z", "Item").width(106),
                             Ui.switcher(readyOnly)
                             .when(true, () -> Ui.button("Ready ✓",
                                     () -> readyOnly.set(false)).primary().small())
                             .when(false, () -> Ui.button("Ready",
                                     () -> readyOnly.set(true)).small()),
                             viewToggle(orderView)
-                    ).gap(3),
+                    ).gap(3).height(24),
                     main
-            ).gap(4);
+            ).gap(4).height(contentHeight());
         }
 
         private UIComponent orderGridCard(OrderRow row) {
@@ -519,12 +538,12 @@ public final class BountyBoardClient {
         /** Accepted system orders only; players cannot mint new system offers. */
         /** Contracts are tracking/claiming only; manual system rolls stay prohibited. */
         private UIComponent generatedPanel() {
-            int panelHeight = Math.max(96, browserHeight() - 30);
+            int panelHeight = bountyBrowserHeight();
             return Ui.column(
                     bountyToolbar(false),
                     bountyBrowser(visibleContracts, contractRows,
                             contractSelection, contractView, panelHeight, false)
-            ).gap(5);
+            ).gap(5).height(contentHeight());
         }
 
         private UIComponent postedPanel() {
@@ -533,7 +552,7 @@ public final class BountyBoardClient {
                     bountyToolbar(true),
                     bountyBrowser(visiblePosted, postedRows,
                             postedSelection, postedView, panelHeight, true)
-            ).gap(5);
+            ).gap(5).height(contentHeight());
         }
 
         private UIComponent bountyToolbar(boolean postedTab) {
@@ -557,7 +576,7 @@ public final class BountyBoardClient {
                             .option("Progress", "Progress").width(70),
                     viewToggle(view),
                     postedTab ? Ui.button("+", () -> tab.set("Create")).primary().small() : Ui.spacer()
-            ).gap(4);
+            ).gap(4).height(24);
         }
 
         private UIComponent viewToggle(Signal<String> view) {
@@ -604,7 +623,7 @@ public final class BountyBoardClient {
             }).height(height).width(detailWidth);
             return mainWidth() >= 215
                     ? centeredRow(Ui.card(browse).padding(2).width(browserWidth).height(height),
-                            detail).gap(6)
+                            detail).gap(6).height(height)
                     : Ui.scroll(Ui.column(browse.height(98), detail.height(160)).gap(5))
                             .height(height);
         }
@@ -733,7 +752,7 @@ public final class BountyBoardClient {
         }
 
         private UIComponent createPanel() {
-            int panelHeight = Math.max(110, mainHeight() - 47);
+            int panelHeight = contentHeight();
             int availableWidth = Math.max(145, mainWidth() - 8);
             int editorWidth = Math.max(94, (availableWidth * 55) / 100);
             int previewWidth = Math.max(90, availableWidth - editorWidth - 6);
@@ -788,7 +807,7 @@ public final class BountyBoardClient {
             }).height(panelHeight).width(previewWidth);
 
             return availableWidth >= 215
-                    ? centeredRow(form, preview).gap(6)
+                    ? centeredRow(form, preview).gap(6).height(panelHeight)
                     : Ui.scroll(Ui.column(form.height(170), preview.height(150)).gap(5))
                             .height(panelHeight);
         }
