@@ -91,7 +91,8 @@ public final class OrderBoardService {
             for (Slot slot : state.slots) {
                 boolean available = slot.offer != null && slot.claimant == null;
                 String status = available ? "AVAILABLE" : slot.claimant != null
-                        ? (slot.claimant.equals(player) ? "TAKEN" : "CLAIMED") : "RESTOCKING";
+                        ? (slot.restockAt > 0 ? "RESTOCKING"
+                        : slot.claimant.equals(player) ? "TAKEN" : "CLAIMED") : "RESTOCKING";
                 result.add(new Card(board.id().toString(), board.scope().name(), slot.index,
                         slot.offer == null ? "" : slot.offer.toString(),
                         slot.title, slot.item, slot.quantity, slot.reward.toPlainString(),
@@ -123,7 +124,8 @@ public final class OrderBoardService {
         if (slot.claimant != null && slot.granted) return "Order already accepted; see Generated contracts";
         if (slot.claimant == null) {
             slot.claimant = player;
-            slot.restockAt = now.getEpochSecond() + board.restock().toSeconds();
+            // Replenish only after the accepted bounty settles.
+            slot.restockAt = 0;
             save(board, state);
         }
         return finishClaim(board, state, slot, now) ?
@@ -168,9 +170,19 @@ public final class OrderBoardService {
             if (slot.claimant != null && !slot.granted) {
                 if (finishClaim(board, state, slot, now)) dirty = true;
             }
-            if (slot.claimant != null && slot.granted && epoch >= slot.restockAt) {
-                clear(slot, epoch);
-                dirty = true;
+            if (slot.claimant != null && slot.granted) {
+                BountyView view = generated.get(slot.claimant, instanceId(slot, slot.claimant), now).orElse(null);
+                if (view != null && slot.restockAt == 0
+                        && (view.status() == BountyStatus.CLAIMED
+                            || view.status() == BountyStatus.CANCELLED
+                            || view.status() == BountyStatus.EXPIRED)) {
+                    slot.restockAt = epoch + board.restock().toSeconds();
+                    dirty = true;
+                }
+                if (slot.restockAt > 0 && epoch >= slot.restockAt) {
+                    clear(slot, epoch);
+                    dirty = true;
+                }
             }
             if (slot.offer != null && slot.claimant == null
                     && (epoch >= slot.expires || epoch >= slot.rotationAt)) {
