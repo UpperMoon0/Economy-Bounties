@@ -20,6 +20,12 @@ The client never supplies player identity, progress counters or payout results. 
 
 Consumable delivery is scoped to an exact **bounty UUID + objective index**. Delivering one stack therefore cannot advance another active bounty—or another identical objective on the same bounty—with the same target.
 
+## Playable Bounty Board
+
+Place `economy_bounties:bounty_board` and right-click it to open the existing **OpenUI** bounty screen. The board is listed in its own **Economy Bounties** creative tab; `/bounties` remains available as a shortcut. Its directional model currently reuses Economy's Market Terminal and casing textures.
+
+The bundled `economy_bounties:example_board` includes six beginner-friendly contracts: carrot and oak-log deliveries, stone mining, cobblestone delivery, zombie hunting, and oak-plank crafting. All four pool groups have at least one level-zero contract with a mint-funded Economy reward.
+
 ## Supported targets
 
 - Fabric 1.20.1
@@ -28,7 +34,7 @@ Consumable delivery is scoped to an exact **bounty UUID + objective index**. Del
 - NeoForge 1.21.1
 - NeoForge 26.1.2
 
-Runtime metadata requires **Economy 0.0.21 or later**. OpenUI MC **0.0.16 or later** is a required **client-side** dependency and is not required on a dedicated server.
+Runtime metadata requires **Economy 0.0.22 or later**. OpenUI MC **0.0.16 or later** is a required **client-side** dependency and is not required on a dedicated server.
 
 ## Engine and extension points
 
@@ -49,7 +55,7 @@ The loader-neutral `common` module provides:
 - JSON codecs for bounty definitions, weighted pools and board protocol payloads
 - bounded network payload parsing and server-side request validation
 
-The common engine remains independent of Minecraft and Economy implementation packages. Minecraft-facing integration targets Economy 0.0.21+ exclusively through the supported top-level `com.nstut.economy.api` surface; it must not import Economy `core`, `trading`, `data`, `api.internal` or loader implementation packages.
+The common engine remains independent of Minecraft and Economy implementation packages. Minecraft-facing integration targets Economy 0.0.22+ exclusively through the supported top-level `com.nstut.economy.api` surface; it must not import Economy `core`, `trading`, `data`, `api.internal` or loader implementation packages.
 
 ## Definition format
 
@@ -101,7 +107,7 @@ Datapack resources are decoded with `BountyJsonCodec` / `BountyPoolJsonCodec`, e
 
 A progression addon supplies `ProgressionProvider.level(player, group)`. Minecraft integration translates authoritative gameplay into `ProgressEvent`s. A reward integration implements `RewardProvider` and must treat `RewardContext.payoutKey()` as an idempotency key.
 
-The built-in Economy adapter uses Economy 0.0.21+'s stable public API. Bounty transactions use namespaced causes such as `economy_bounties:bounty_reward`, with bounty identifiers and operation identifiers copied into structured transaction metadata. Generated rewards may be mint-backed or treasury-backed; player-posted bounty funds use the Economy server account as their transfer boundary.
+The built-in Economy adapter uses Economy 0.0.22+'s stable public API. Bounty transactions use namespaced causes such as `economy_bounties:bounty_reward`, with bounty identifiers and operation identifiers copied into structured transaction metadata. Generated rewards may be mint-backed or treasury-backed; player-posted bounty funds use the Economy server account as their transfer boundary.
 
 CI publishes current `Economy/main` to Maven local first and then resolves Economy Bounties through the public Maven coordinates rather than Gradle composite substitution. That intentionally catches missing/transitive artifact and stable-API compatibility problems that an external addon consumer would hit.
 

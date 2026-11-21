@@ -1,0 +1,27 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "economy_bounties:block/bounty_board",
+      "x": 90
+    },
+    "facing=up": {
+      "model": "economy_bounties:block/bounty_board",
+      "x": 270
+    },
+    "facing=north": {
+      "model": "economy_bounties:block/bounty_board"
+    },
+    "facing=south": {
+      "model": "economy_bounties:block/bounty_board",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "economy_bounties:block/bounty_board",
+      "y": 270
+    },
+    "facing=east": {
+      "model": "economy_bounties:block/bounty_board",
+      "y": 90
+    }
+  }
+}
