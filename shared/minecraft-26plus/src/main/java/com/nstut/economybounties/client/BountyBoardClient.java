@@ -8,6 +8,7 @@ import com.nstut.openui.api.UIComponent;
 import com.nstut.openui.api.Ui;
 import com.nstut.openui.minecraft.UiScreen;
 import com.nstut.openui.layout.Alignment;
+import com.nstut.openui.state.Computed;
 import com.nstut.openui.state.Signal;
 import com.nstut.openui.state.Signals;
 import net.minecraft.client.Minecraft;
@@ -33,6 +34,14 @@ public final class BountyBoardClient {
 
         private final Signal<String> tab = Signals.of("Orders");
         private final Signal<List<BoardSnapshot.OrderEntry>> orders = Signals.of(List.of());
+        private final Signal<String> orderFilter = Signals.of("All");
+        private final Computed<List<BoardSnapshot.OrderEntry>> visibleOrders = Signals.computed(() ->
+                orders.get().stream().filter(order -> switch (orderFilter.get()) {
+                    case "Personal" -> "PERSONAL".equals(order.scope());
+                    case "Town" -> "SHARED".equals(order.scope());
+                    case "Special" -> order.board().contains("daily_") || order.board().contains("festival");
+                    default -> true;
+                }).toList());
         private final Signal<List<BoardSnapshot.PoolEntry>> pools = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> generated = Signals.of(List.of());
         private final Signal<List<BoardSnapshot.BountyEntry>> posted = Signals.of(List.of());
@@ -102,10 +111,12 @@ public final class BountyBoardClient {
             return Ui.column(
                     centeredRow(Ui.heading("Dispatch board"), Ui.spacer(),
                             Ui.badge("AUTO-RESTOCK")),
-                    Ui.text("Six personal offers, shared town dispatches, and timed specials."),
-                    Ui.list(orders, this::orderCard).height(196),
+                    Ui.text("Orders restock automatically. Rare deliveries earn more."),
+                    Ui.tabs(orderFilter).tab("All", "All").tab("Personal", "Personal")
+                            .tab("Town", "Town").tab("Special", "Special"),
+                    Ui.list(visibleOrders, this::orderCard).height(161),
                     centeredRow(
-                            Ui.text("Taken orders move to Contracts. Shared offers are first-come."),
+                            Ui.text("Accepted orders appear in Contracts."),
                             Ui.spacer(),
                             Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
                     ).gap(4)
@@ -159,9 +170,11 @@ public final class BountyBoardClient {
                 return "New order in " + formatTime(restock);
             }
             return switch (order.timer()) {
-                case "NONE" -> "No delivery deadline";
-                case "ACCEPT" -> "Deadline begins on acceptance";
-                default -> remaining > 0 ? "Offer expires in " + formatTime(remaining) : "Offer expired";
+                case "NONE" -> "Refreshes in " + formatTime(Math.max(0, remaining)) + " | No delivery deadline";
+                case "ACCEPT" -> "Accept in " + formatTime(Math.max(0, remaining))
+                        + " | Deliver within " + formatTime(order.deadlineSeconds());
+                default -> remaining > 0 ? "Rush: " + formatTime(remaining) + " left"
+                        : "Rush order expired";
             };
         }
 
