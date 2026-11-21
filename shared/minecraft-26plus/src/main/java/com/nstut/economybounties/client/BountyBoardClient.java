@@ -192,7 +192,7 @@ public final class BountyBoardClient {
                             .when("Create", this::createPanel)
             ).gap(5).width(contentWidth).height(height);
             return Ui.card(centeredRow(sidebar, main).gap(7))
-                    .padding(7).height(uiHeight()).elevated(true);
+                    .padding(7).elevated(true).height(uiHeight());
         }
 
         /** Reactive, narrow, independently scrollable Economy-style navigation. */
