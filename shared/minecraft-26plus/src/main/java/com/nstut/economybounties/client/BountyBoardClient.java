@@ -200,8 +200,19 @@ public final class BountyBoardClient {
             return Ui.component(() -> {
                 String selected = tab.get();
                 return List.of(Ui.node("nav", destination + selected, () -> {
-                    var button = Ui.button(caption, () -> tab.set(destination)).small();
-                    return destination.equals(selected) ? button.primary() : button.ghost();
+                    int color = destination.equals(selected) ? 0x76EDCB : 0xBDB9C4;
+                    String icon = switch (destination) {
+                        case "Orders" -> "1";
+                        case "Generated" -> "2";
+                        case "Posted" -> "3";
+                        default -> "+";
+                    };
+                    return Ui.card(centeredRow(
+                            Ui.icon(icon, color),
+                            Ui.text(caption).nowrap().ellipsis(true).flex()
+                    ).gap(4)).padding(4).elevated(false)
+                            .selected(destination.equals(selected))
+                            .onClick(() -> tab.set(destination));
                 }));
             }).width(sideWidth() - 7).height(27);
         }
@@ -315,11 +326,12 @@ public final class BountyBoardClient {
                                     .option("Restocking", "Restocking").width(76),
                             Ui.select(orderSort).option("Ready first", "Ready").option("Reward", "Reward")
                                     .option("Soonest", "Time").option("Item A-Z", "Item").width(73),
-                            Ui.button(readyOnly.get() ? "Ready ✓" : "Ready",
-                                    () -> readyOnly.set(!readyOnly.get())).small(),
-                            Ui.button("▦", () -> orderView.set("Grid"))
-                                    .small(),
-                            Ui.button("☷", () -> orderView.set("List")).small()
+                            Ui.switcher(readyOnly)
+                            .when(true, () -> Ui.button("Ready ✓",
+                                    () -> readyOnly.set(false)).primary().small())
+                            .when(false, () -> Ui.button("Ready",
+                                    () -> readyOnly.set(true)).small()),
+                            viewToggle(orderView)
                     ).gap(3),
                     main
             ).gap(4);
@@ -543,10 +555,21 @@ public final class BountyBoardClient {
                     statusFilter,
                     Ui.select(sort).option("Expiry", "Expiry").option("Reward", "Reward")
                             .option("Progress", "Progress").width(70),
-                    Ui.button("▦", () -> view.set("Grid")).small(),
-                    Ui.button("☷", () -> view.set("List")).small(),
+                    viewToggle(view),
                     postedTab ? Ui.button("+", () -> tab.set("Create")).primary().small() : Ui.spacer()
             ).gap(4);
+        }
+
+        private UIComponent viewToggle(Signal<String> view) {
+            return Ui.switcher(view)
+                    .when("Grid", () -> centeredRow(
+                            Ui.button("Grid", () -> view.set("Grid")).primary().small(),
+                            Ui.button("List", () -> view.set("List")).small()
+                    ).gap(2))
+                    .when("List", () -> centeredRow(
+                            Ui.button("Grid", () -> view.set("Grid")).small(),
+                            Ui.button("List", () -> view.set("List")).primary().small()
+                    ).gap(2));
         }
 
         private UIComponent bountyBrowser(
@@ -732,9 +755,11 @@ public final class BountyBoardClient {
                     .itemHeight(52).gap(4).height(132));
             editor.add(Ui.text("Choose a type, target item/entity and quantity."));
             editor.add(Ui.divider());
-            editor.add(Ui.button(advancedCreate.get() ? "▾ Audience & progression"
-                            : "▸ Audience & progression",
-                    () -> advancedCreate.set(!advancedCreate.get())).small());
+            editor.add(Ui.switcher(advancedCreate)
+                    .when(true, () -> Ui.button("Hide advanced",
+                            () -> advancedCreate.set(false)).primary().small())
+                    .when(false, () -> Ui.button("Audience & progression",
+                            () -> advancedCreate.set(true)).small()));
             editor.add(Ui.component(() -> {
                 boolean expanded = advancedCreate.get();
                 return List.of(Ui.node("advanced-create", String.valueOf(expanded), () ->
@@ -871,7 +896,7 @@ public final class BountyBoardClient {
                 return;
             }
             List<ObjectiveForm> next = new ArrayList<>(current);
-            next.add(new ObjectiveForm("", "", "1"));
+            next.add(new ObjectiveForm("economy_bounties:deliver_item", "minecraft:paper", "1"));
             objectiveForms.set(List.copyOf(next));
         }
 
