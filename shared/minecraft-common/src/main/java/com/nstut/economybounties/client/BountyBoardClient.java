@@ -338,8 +338,14 @@ public final class BountyBoardClient {
         private static String bountyIcon(BoardSnapshot.BountyEntry b) {
             if (b.icon() != null && !b.icon().isBlank()
                     && !b.icon().equals("minecraft:paper")) return b.icon();
-            return b.objectives().isEmpty() ? "minecraft:paper"
-                    : b.objectives().get(0).target();
+            if (b.objectives().isEmpty()) return "minecraft:paper";
+            BoardSnapshot.ObjectiveEntry task = b.objectives().get(0);
+            if (task.type().endsWith(":kill_entity")) return "minecraft:iron_sword";
+            if (task.type().endsWith(":visit_location")) return "minecraft:compass";
+            if (task.type().endsWith(":deliver_fluid")) return "minecraft:bucket";
+            if (task.type().endsWith(":craft_item")) return "minecraft:crafting_table";
+            if (task.type().endsWith(":mine_block")) return "minecraft:iron_pickaxe";
+            return task.target();
         }
         /**
          * Automatic orders are a curated, server-owned storefront. No manual Roll
@@ -748,10 +754,16 @@ public final class BountyBoardClient {
                             ? Ui.badge(Component.literal("Mine"), Badge.Variant.PRIMARY)
                             : Ui.spacer()
             ).gap(3));
-            if (!bounty.subtitle().isBlank()) content.add(Ui.text(bounty.subtitle()));
-            if (!bounty.description().isBlank()) content.add(Ui.text(bounty.description()));
+            if (!bounty.subtitle().isBlank()) content.add(
+                    Ui.text(bounty.subtitle()).nowrap().ellipsis(true).tooltip(bounty.subtitle()));
+            if (!bounty.description().isBlank()) content.add(
+                    Ui.text(bounty.description()).nowrap().ellipsis(true)
+                            .tooltip(bounty.description()));
             content.add(Ui.divider());
-            content.add(Ui.heading("Objectives"));
+            content.add(centeredRow(Ui.icon(new ItemStack(Items.CHEST)).size(18),
+                    Ui.heading("Objectives"), Ui.spacer(),
+                    Ui.badge(Component.literal(String.valueOf(bounty.objectives().size())),
+                            Badge.Variant.NEUTRAL)).gap(4));
             for (BoardSnapshot.ObjectiveEntry objective : bounty.objectives()) {
                 List<UIComponent> pieces = new ArrayList<>();
                 pieces.add(centeredRow(
@@ -774,9 +786,11 @@ public final class BountyBoardClient {
                         .gap(3)).padding(5));
             }
             content.add(Ui.divider());
-            content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
-                    Ui.heading("$" + bounty.reward()), Ui.spacer()).gap(4));
-            content.add(Ui.text("Expires in " + countdown(bounty.expiresAtEpochSecond())));
+            content.add(centeredRow(
+                    Ui.icon("$", 0x5BE0BC), Ui.heading("$" + bounty.reward()),
+                    Ui.spacer(), Ui.icon(new ItemStack(Items.CLOCK)).size(16),
+                    Ui.text(countdown(bounty.expiresAtEpochSecond())).nowrap().ellipsis(true)
+            ).gap(4));
             List<UIComponent> actions = new ArrayList<>();
             if (bounty.objectives().size() == 1 && bounty.objectives().get(0).deliverable()) {
                 BoardSnapshot.ObjectiveEntry objective = bounty.objectives().get(0);
@@ -828,10 +842,14 @@ public final class BountyBoardClient {
             List<UIComponent> editor = new ArrayList<>();
             editor.add(centeredRow(Ui.icon(new ItemStack(Items.WRITABLE_BOOK)).size(20),
                     Ui.heading("Job details")).gap(5));
-            editor.add(Ui.textField(title).placeholder("Job title")
-                    .maxLength(BoardRequest.MAX_TITLE_CHARS).width(inputWidth));
-            editor.add(Ui.textField(description).placeholder("Optional details")
-                    .maxLength(BoardRequest.MAX_DESCRIPTION_CHARS).width(inputWidth));
+            editor.add(centeredRow(Ui.icon(new ItemStack(Items.NAME_TAG)).size(17),
+                    Ui.textField(title).placeholder("Job title")
+                            .maxLength(BoardRequest.MAX_TITLE_CHARS)
+                            .width(Math.max(55, inputWidth - 21))).gap(4));
+            editor.add(centeredRow(Ui.icon(new ItemStack(Items.PAPER)).size(17),
+                    Ui.textField(description).placeholder("Optional details")
+                            .maxLength(BoardRequest.MAX_DESCRIPTION_CHARS)
+                            .width(Math.max(55, inputWidth - 21))).gap(4));
             editor.add(jobIconPicker(inputWidth));
             editor.add(centeredRow(
                     compactNumericCard(new ItemStack(Items.EMERALD), "Reward $",
@@ -1148,26 +1166,50 @@ public final class BountyBoardClient {
             var choice = Ui.select(form.quickPick).option("Choose target...", "");
             switch (type.substring(type.indexOf(':') + 1)) {
                 case "deliver_item" -> {
-                    choice.option("Iron Ingot", "minecraft:iron_ingot")
-                            .option("Oak Log", "minecraft:oak_log")
-                            .option("Wheat", "minecraft:wheat")
-                            .option("Carrot", "minecraft:carrot")
-                            .option("Potato", "minecraft:potato");
+                    choice.option(Component.literal("Iron Ingot"), "minecraft:iron_ingot",
+                                    OrderItemIcons.icon("minecraft:iron_ingot"))
+                            .option(Component.literal("Oak Log"), "minecraft:oak_log",
+                                    OrderItemIcons.icon("minecraft:oak_log"))
+                            .option(Component.literal("Wheat"), "minecraft:wheat",
+                                    OrderItemIcons.icon("minecraft:wheat"))
+                            .option(Component.literal("Carrot"), "minecraft:carrot",
+                                    OrderItemIcons.icon("minecraft:carrot"))
+                            .option(Component.literal("Potato"), "minecraft:potato",
+                                    OrderItemIcons.icon("minecraft:potato"));
                 }
-                case "craft_item" -> choice.option("Bread", "minecraft:bread")
-                        .option("Torch", "minecraft:torch")
-                        .option("Oak Planks", "minecraft:oak_planks");
-                case "mine_block" -> choice.option("Stone", "minecraft:stone")
-                        .option("Oak Log", "minecraft:oak_log")
-                        .option("Iron Ore", "minecraft:iron_ore");
-                case "deliver_fluid" -> choice.option("Water", "minecraft:water")
-                        .option("Lava", "minecraft:lava");
-                case "kill_entity" -> choice.option("Zombie", "minecraft:zombie")
-                        .option("Skeleton", "minecraft:skeleton")
-                        .option("Creeper", "minecraft:creeper");
-                case "visit_location" -> choice.option("Overworld", "minecraft:overworld")
-                        .option("Nether", "minecraft:the_nether")
-                        .option("End", "minecraft:the_end");
+                case "craft_item" -> choice
+                        .option(Component.literal("Bread"), "minecraft:bread",
+                                OrderItemIcons.icon("minecraft:bread"))
+                        .option(Component.literal("Torch"), "minecraft:torch",
+                                OrderItemIcons.icon("minecraft:torch"))
+                        .option(Component.literal("Oak Planks"), "minecraft:oak_planks",
+                                OrderItemIcons.icon("minecraft:oak_planks"));
+                case "mine_block" -> choice
+                        .option(Component.literal("Stone"), "minecraft:stone",
+                                OrderItemIcons.icon("minecraft:stone"))
+                        .option(Component.literal("Oak Log"), "minecraft:oak_log",
+                                OrderItemIcons.icon("minecraft:oak_log"))
+                        .option(Component.literal("Iron Ore"), "minecraft:iron_ore",
+                                OrderItemIcons.icon("minecraft:iron_ore"));
+                case "deliver_fluid" -> choice
+                        .option(Component.literal("Water"), "minecraft:water",
+                                Ui.icon(new ItemStack(Items.WATER_BUCKET)))
+                        .option(Component.literal("Lava"), "minecraft:lava",
+                                Ui.icon(new ItemStack(Items.LAVA_BUCKET)));
+                case "kill_entity" -> choice
+                        .option(Component.literal("Zombie"), "minecraft:zombie",
+                                Ui.icon(new ItemStack(Items.ZOMBIE_HEAD)))
+                        .option(Component.literal("Skeleton"), "minecraft:skeleton",
+                                Ui.icon(new ItemStack(Items.SKELETON_SKULL)))
+                        .option(Component.literal("Creeper"), "minecraft:creeper",
+                                Ui.icon(new ItemStack(Items.CREEPER_HEAD)));
+                case "visit_location" -> choice
+                        .option(Component.literal("Overworld"), "minecraft:overworld",
+                                Ui.icon(new ItemStack(Items.GRASS_BLOCK)))
+                        .option(Component.literal("Nether"), "minecraft:the_nether",
+                                Ui.icon(new ItemStack(Items.NETHERRACK)))
+                        .option(Component.literal("End"), "minecraft:the_end",
+                                Ui.icon(new ItemStack(Items.END_STONE)));
                 default -> { }
             }
             return choice.onChange(selected -> {
