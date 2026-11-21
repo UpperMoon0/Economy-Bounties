@@ -505,47 +505,198 @@ public final class BountyBoardClient {
         }
 
         /** Accepted system orders only; players cannot mint new system offers. */
+        /** Contracts are tracking/claiming only; manual system rolls stay prohibited. */
         private UIComponent generatedPanel() {
+            int panelHeight = Math.max(96, browserHeight() - 30);
             return Ui.column(
-                    Ui.heading("Your contracts"),
-                    Ui.list(generated, this::bountyCard).itemHeight(156).gap(5)
-                            .height(Math.max(130, uiHeight() - 108))
+                    bountyToolbar(false),
+                    bountyBrowser(visibleContracts, contractRows,
+                            contractSelection, contractView, panelHeight, false)
             ).gap(5);
         }
 
         private UIComponent postedPanel() {
+            int panelHeight = Math.max(96, browserHeight() - 30);
             return Ui.column(
-                    centeredRow(Ui.heading("Player-posted bounties"), Ui.spacer(),
-                            Ui.button("Create", () -> tab.set("Create")).primary().small()).gap(6),
-                    Ui.list(posted, this::bountyCard).itemHeight(156).gap(5).height(235)
+                    bountyToolbar(true),
+                    bountyBrowser(visiblePosted, postedRows,
+                            postedSelection, postedView, panelHeight, true)
             ).gap(5);
         }
 
-        private UIComponent bountyCard(BoardSnapshot.BountyEntry bounty) {
-            List<UIComponent> objectiveRows = new ArrayList<>();
-            for (BoardSnapshot.ObjectiveEntry objective : bounty.objectives()) {
-                List<UIComponent> row = new ArrayList<>();
-                row.add(Ui.text(objective.target() + "  " + objective.progress() + "/" + objective.targetAmount()));
-                row.add(Ui.spacer());
-                if (objective.deliverable()) {
-                    row.add(Ui.button("Deliver", () -> BountyNetwork.sendRequest(
-                            BoardRequest.deliver(bounty.source(), bounty.id(), objective.index(), objective.type(), objective.target()))).success().small());
-                }
-                objectiveRows.add(centeredRow(row.toArray(UIComponent[]::new)).gap(4));
-            }
-            List<UIComponent> actions = new ArrayList<>();
-            if (bounty.canAccept()) actions.add(Ui.button("Accept", () -> sendBountyAction(bounty, true, false, false)).primary().small());
-            if (bounty.canClaim()) actions.add(Ui.button("Claim", () -> sendBountyAction(bounty, false, false, true)).success().small());
-            if (bounty.canCancel()) actions.add(Ui.button("Cancel", () -> sendBountyAction(bounty, false, true, false)).danger().small());
+        private UIComponent bountyToolbar(boolean postedTab) {
+            Signal<String> search = postedTab ? postedSearch : contractSearch;
+            Signal<String> status = postedTab ? postedStatus : contractStatus;
+            Signal<String> sort = postedTab ? postedSort : contractSort;
+            Signal<String> view = postedTab ? postedView : contractView;
+            UIComponent statusFilter = postedTab
+                    ? Ui.select(status).option("All", "All").option("Open", "Open")
+                            .option("Active", "Active").option("Completed", "Completed")
+                            .option("Expired", "Expired").option("Mine", "Mine").width(75)
+                    : Ui.select(status).option("All", "All").option("Active", "Active")
+                            .option("Claimable", "Claimable").option("Completed", "Completed")
+                            .option("Expired", "Expired").width(75);
+            return centeredRow(
+                    Ui.textField(search).placeholder(postedTab
+                            ? "Search posted..." : "Search contracts...")
+                            .width(Math.max(87, mainWidth() - 229)),
+                    statusFilter,
+                    Ui.select(sort).option("Expiry", "Expiry").option("Reward", "Reward")
+                            .option("Progress", "Progress").width(70),
+                    Ui.button("▦", () -> view.set("Grid")).small(),
+                    Ui.button("☷", () -> view.set("List")).small(),
+                    postedTab ? Ui.button("+", () -> tab.set("Create")).primary().small() : Ui.spacer()
+            ).gap(4);
+        }
 
+        private UIComponent bountyBrowser(
+                Computed<List<BoardSnapshot.BountyEntry>> filtered,
+                Computed<List<BountyRow>> rows,
+                Signal<String> selectedId, Signal<String> view,
+                int height, boolean postedTab) {
+            int availableWidth = Math.max(142, mainWidth() - 8);
+            int browserWidth = Math.max(82, (availableWidth * 51) / 100);
+            int detailWidth = Math.max(85, availableWidth - browserWidth - 6);
+            UIComponent browse = Ui.switcher(view)
+                    .when("Grid", () -> Ui.virtualGrid(rows, this::bountyGridCard)
+                            .key(row -> row.bounty().id()).minCellWidth(96)
+                            .cellHeight(79).gap(4).height(height).width(browserWidth))
+                    .when("List", () -> Ui.list(rows, this::bountyListRow)
+                            .key(row -> row.bounty().id()).itemHeight(47).gap(4)
+                            .height(height).width(browserWidth));
+
+            UIComponent detail = Ui.component(() -> {
+                List<BoardSnapshot.BountyEntry> filteredItems = filtered.get();
+                String chosen = selectedId.get();
+                if (filteredItems.isEmpty()) return List.of(Ui.node("bounty-empty", "empty",
+                        () -> Ui.card(Ui.column(
+                                Ui.heading("Nothing to show"),
+                                Ui.text("Try another status or search term.")
+                        ).gap(5)).padding(7).height(height)));
+                BoardSnapshot.BountyEntry b = filteredItems.stream()
+                        .filter(entry -> entry.id().equals(chosen))
+                        .findFirst().orElse(filteredItems.get(0));
+                return List.of(Ui.node("bounty-detail", b.id() + ":" + b.hashCode(),
+                        () -> bountyDetailPanel(b, height)));
+            }).height(height).width(detailWidth);
+            return mainWidth() >= 215
+                    ? centeredRow(Ui.card(browse).padding(2).width(browserWidth).height(height),
+                            detail).gap(6)
+                    : Ui.scroll(Ui.column(browse.height(98), detail.height(160)).gap(5))
+                            .height(height);
+        }
+
+        private UIComponent bountyGridCard(BountyRow row) {
+            BoardSnapshot.BountyEntry b = row.bounty();
+            return Ui.card(Ui.column(
+                    centeredRow(OrderItemIcons.icon(bountyIcon(b)),
+                            Ui.text(readableItem(b.title())).nowrap().ellipsis(true).flex()).gap(4),
+                    Ui.heading("$" + b.reward()).nowrap().ellipsis(true),
+                    centeredRow(
+                            Ui.text(b.status()).nowrap().ellipsis(true),
+                            Ui.spacer(),
+                            Ui.text(b.ownedByPlayer() ? "Mine" : " ").nowrap()
+                    ).gap(2),
+                    Ui.progress(Signals.of(bountyProgress(b))).height(6),
+                    Ui.text("Due " + countdown(b.expiresAtEpochSecond()))
+                            .nowrap().ellipsis(true)
+            ).gap(3)).padding(4).elevated(false).selected(row.selected())
+                    .onClick(() -> selectBounty(b));
+        }
+
+        private UIComponent bountyListRow(BountyRow row) {
+            BoardSnapshot.BountyEntry b = row.bounty();
+            return Ui.card(centeredRow(
+                    OrderItemIcons.icon(bountyIcon(b)),
+                    Ui.column(
+                            Ui.text(readableItem(b.title())).nowrap().ellipsis(true),
+                            Ui.text("$" + b.reward() + "  " + b.status())
+                                    .nowrap().ellipsis(true)
+                    ).gap(4).flex()
+            ).gap(5)).padding(4).elevated(false).selected(row.selected())
+                    .onClick(() -> selectBounty(b));
+        }
+
+        private void selectBounty(BoardSnapshot.BountyEntry bounty) {
+            if ("posted".equals(bounty.source())) postedSelection.set(bounty.id());
+            else contractSelection.set(bounty.id());
+        }
+
+        private UIComponent bountyDetailPanel(BoardSnapshot.BountyEntry bounty, int height) {
             List<UIComponent> content = new ArrayList<>();
-            content.add(centeredRow(Ui.heading(bounty.title()), Ui.spacer(), Ui.badge(bounty.status())).gap(5));
+            content.add(centeredRow(
+                    OrderItemIcons.icon(bountyIcon(bounty)).size(25),
+                    Ui.column(
+                            Ui.heading(readableItem(bounty.title())).nowrap().ellipsis(true),
+                            Ui.text(bounty.source().equals("posted")
+                                    ? "Player-funded" : "System order").nowrap()
+                    ).gap(3).flex()
+            ).gap(6));
+            content.add(centeredRow(
+                    Ui.badge(Component.literal(bounty.status()),
+                            bounty.canClaim() ? Badge.Variant.SUCCESS : Badge.Variant.NEUTRAL),
+                    bounty.ownedByPlayer()
+                            ? Ui.badge(Component.literal("Mine"), Badge.Variant.PRIMARY)
+                            : Ui.spacer()
+            ).gap(3));
             if (!bounty.subtitle().isBlank()) content.add(Ui.text(bounty.subtitle()));
             if (!bounty.description().isBlank()) content.add(Ui.text(bounty.description()));
-            content.add(Ui.text("Reward: " + bounty.reward()));
-            content.addAll(objectiveRows);
-            if (!actions.isEmpty()) content.add(centeredRow(actions.toArray(UIComponent[]::new)).gap(5));
-            return Ui.card(Ui.column(content.toArray(UIComponent[]::new)).gap(3)).padding(6);
+            content.add(Ui.divider());
+            content.add(Ui.heading("Objectives"));
+            for (BoardSnapshot.ObjectiveEntry objective : bounty.objectives()) {
+                List<UIComponent> pieces = new ArrayList<>();
+                pieces.add(centeredRow(
+                        objective.type().contains("kill_entity")
+                                ? Ui.icon("☠", 0xE0B3A0)
+                                : OrderItemIcons.icon(objective.target()),
+                        Ui.text(readableItem(objective.target()) + " "
+                                + objective.progress() + "/" + objective.targetAmount())
+                                .nowrap().ellipsis(true).flex()
+                ).gap(5));
+                double ratio = objective.targetAmount() <= 0 ? 0
+                        : Math.max(0, Math.min(1, objective.progress() /
+                                (double) objective.targetAmount()));
+                pieces.add(Ui.progress(Signals.of(ratio)).height(6));
+                if (objective.deliverable() && bounty.objectives().size() > 1) {
+                    pieces.add(Ui.button("Deliver this", () -> deliverObjective(bounty, objective))
+                            .success().small());
+                }
+                content.add(Ui.card(Ui.column(pieces.toArray(UIComponent[]::new))
+                        .gap(3)).padding(5));
+            }
+            content.add(Ui.divider());
+            content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
+                    Ui.heading("$" + bounty.reward()), Ui.spacer()).gap(4));
+            content.add(Ui.text("Expires in " + countdown(bounty.expiresAtEpochSecond())));
+            List<UIComponent> actions = new ArrayList<>();
+            if (bounty.objectives().size() == 1 && bounty.objectives().get(0).deliverable()) {
+                BoardSnapshot.ObjectiveEntry objective = bounty.objectives().get(0);
+                actions.add(Ui.button("Deliver", () -> deliverObjective(bounty, objective))
+                        .success().small());
+            }
+            if (bounty.canAccept()) actions.add(Ui.button("Accept", () ->
+                    sendBountyAction(bounty, true, false, false)).primary().small());
+            if (bounty.canClaim()) actions.add(Ui.button("Claim", () ->
+                    sendBountyAction(bounty, false, false, true)).success().small());
+            if (bounty.canCancel()) actions.add(Ui.button("Cancel", () ->
+                    sendBountyAction(bounty, false, true, false)).danger().small());
+            UIComponent footer = actions.isEmpty() ? Ui.text("No actions available")
+                    : centeredRow(actions.toArray(UIComponent[]::new)).gap(4);
+            return Ui.card(Ui.column(
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
+                            .height(Math.max(61, height - 36)),
+                    Ui.divider(),
+                    footer
+            ).gap(4)).padding(5).height(height);
+        }
+
+        private void deliverObjective(BoardSnapshot.BountyEntry b, BoardSnapshot.ObjectiveEntry objective) {
+            BountyNetwork.sendRequest(BoardRequest.deliver(b.source(), b.id(),
+                    objective.index(), objective.type(), objective.target()));
+        }
+
+        private static String countdown(long epochSeconds) {
+            return formatTime(Math.max(0, epochSeconds - Instant.now().getEpochSecond()));
         }
 
         private void sendBountyAction(BoardSnapshot.BountyEntry bounty, boolean accept, boolean cancel, boolean claim) {
