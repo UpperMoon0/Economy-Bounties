@@ -1,6 +1,8 @@
 package com.nstut.economybounties.client;
 
 import com.nstut.economybounties.board.BoardRequest;
+import com.nstut.economybounties.board.BoardBrowserLayout;
+import com.nstut.economybounties.board.BoardScreenKeyPolicy;
 import com.nstut.economybounties.board.BoardSnapshot;
 import com.nstut.economybounties.network.BountyNetwork;
 import com.nstut.openui.api.HStack;
@@ -9,6 +11,7 @@ import com.nstut.openui.api.UIComponent;
 import com.nstut.openui.api.Ui;
 import com.nstut.openui.minecraft.UiScreen;
 import com.nstut.openui.layout.Alignment;
+import com.nstut.openui.layout.Justification;
 import com.nstut.openui.state.Computed;
 import com.nstut.openui.state.Signal;
 import com.nstut.openui.state.Signals;
@@ -171,9 +174,31 @@ public final class BountyBoardClient {
         // SignalSwitcher using preferred (intrinsic) height, which is only one
         // VirtualGrid row. Without a height on the switcher *and* its browser
         // row, the outer card stays tall while all content stops halfway down.
-        private int contentHeight() { return Math.max(70, mainHeight() - 45); }
+        // Allocate only the actual compact header, not an invisible notice row.
+        private int contentHeight() { return Math.max(70, mainHeight() - 24); }
         private int orderBrowserHeight() { return Math.max(50, contentHeight() - 56); }
         private int bountyBrowserHeight() { return Math.max(50, contentHeight() - 29); }
+
+        /**
+         * UiScreen has no inventory menu, so it does not close on the inventory
+         * key by default. Mirror Economy Market's focus/overlay ownership rule:
+         * E closes the board only when no text editor or modal owns the key.
+         * Escape continues through OpenUI's normal dismiss/close pipeline.
+         */
+        @Override
+        public boolean keyPressed(int key, int scanCode, int modifiers) {
+            boolean inventoryKey = Minecraft.getInstance().options.keyInventory.matches(key, scanCode);
+            if (!inventoryKey) return super.keyPressed(key, scanCode, modifiers);
+            var ui = uiRuntime();
+            boolean typing = ui != null && ui.hasTextInputFocus();
+            boolean blocking = ui != null && ui.overlays().hasBlockingOverlay();
+            if (BoardScreenKeyPolicy.closeOnInventoryKey(inventoryKey, typing, blocking)) {
+                onClose();
+                return true;
+            }
+            if (ui != null) ui.keyPressed(key, scanCode, modifiers);
+            return true;
+        }
 
         @Override protected UIComponent buildUI() {
             int side = sideWidth(), contentWidth = mainWidth(), height = mainHeight();
@@ -199,10 +224,10 @@ public final class BountyBoardClient {
                                         () -> Ui.heading(heading)));
                             }),
                             Ui.spacer(),
-                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small(),
-                            Ui.button("Close", this::onClose).ghost().small()
-                    ).gap(4).height(24),
-                    Ui.text(notice).height(11),
+                            Ui.text(notice).nowrap().ellipsis(true)
+                                    .width(contentWidth > 330 ? Math.min(170, contentWidth - 280) : 0),
+                            Ui.button("Refresh", () -> BountyNetwork.sendRequest(BoardRequest.refresh())).small()
+                    ).gap(4).height(18),
                     Ui.switcher(tab)
                             .when("Orders", this::ordersPanel)
                             .when("Generated", this::generatedPanel)
@@ -297,38 +322,14 @@ public final class BountyBoardClient {
          */
         private UIComponent ordersPanel() {
             int panelHeight = orderBrowserHeight();
-            int availableWidth = Math.max(145, mainWidth() - 10);
-            int listWidth = Math.max(80, (availableWidth * 54) / 100);
-            int detailWidth = Math.max(82, availableWidth - listWidth - 6);
-
-            UIComponent browser = Ui.switcher(orderView)
-                    .when("Grid", () -> Ui.virtualGrid(orderRows, this::orderGridCard)
-                            .key(row -> orderKey(row.order()))
-                            .minCellWidth(96).cellHeight(82).gap(4)
-                            .height(panelHeight).width(listWidth))
-                    .when("List", () -> Ui.list(orderRows, this::orderListRow)
-                            .key(row -> orderKey(row.order()))
-                            .itemHeight(39).gap(4)
-                            .height(panelHeight).width(listWidth));
-            UIComponent details = Ui.component(() -> {
-                List<BoardSnapshot.OrderEntry> selection = selectedOrder.get();
-                if (selection.isEmpty()) return List.of(Ui.node("orders-empty", "empty",
-                        () -> Ui.card(Ui.column(
-                                Ui.heading("No matching orders"),
-                                Ui.text("Adjust your search or filters.")
-                        ).gap(6)).padding(7).height(panelHeight)));
-                BoardSnapshot.OrderEntry order = selection.get(0);
-                return List.of(Ui.node("order-detail", orderKey(order) + "@" + order.hashCode(),
-                        () -> orderDetails(order, panelHeight)));
-            }).width(detailWidth).height(panelHeight);
-
-            UIComponent browserBody = Ui.card(browser).padding(2)
-                    .width(listWidth).height(panelHeight);
-            UIComponent rightBody = details.width(detailWidth);
-            UIComponent main = mainWidth() >= 215
-                    ? centeredRow(browserBody, rightBody).gap(6).height(panelHeight)
-                    : Ui.scroll(Ui.column(browserBody.height(93), rightBody.height(160)).gap(5))
-                            .height(panelHeight);
+            // The entire browser/detail split reacts when Grid/List changes.
+            // A VirtualGrid inside an unchanged 54% list pane can only fit one
+            // tile at high GUI scale, despite the button saying "Grid".
+            UIComponent body = Ui.component(() -> {
+                String mode = orderView.get();
+                return List.of(Ui.node("orders-browser-layout", mode,
+                        () -> orderBrowser(mode, panelHeight)));
+            }).height(panelHeight).fillWidth();
 
             return Ui.column(
                     centeredRow(
@@ -346,33 +347,73 @@ public final class BountyBoardClient {
                             Ui.select(orderSort).option("Ready first", "Ready").option("Reward", "Reward")
                                     .option("Soonest", "Time").option("Item A-Z", "Item").width(106),
                             Ui.switcher(readyOnly)
-                            .when(true, () -> Ui.button("Ready ✓",
-                                    () -> readyOnly.set(false)).primary().small())
-                            .when(false, () -> Ui.button("Ready",
-                                    () -> readyOnly.set(true)).small()),
+                                    .when(true, () -> Ui.button("Ready ✓",
+                                            () -> readyOnly.set(false)).primary().small())
+                                    .when(false, () -> Ui.button("Ready",
+                                            () -> readyOnly.set(true)).small()),
                             viewToggle(orderView)
                     ).gap(3).height(24),
-                    main
+                    body
             ).gap(4).height(contentHeight());
         }
 
+        private UIComponent orderBrowser(String mode, int panelHeight) {
+            int availableWidth = Math.max(145, mainWidth() - 10);
+            boolean grid = "Grid".equals(mode);
+            int browserWidth = BoardBrowserLayout.browserWidth(availableWidth, grid);
+            int detailWidth = Math.max(82, availableWidth - browserWidth - 6);
+
+            UIComponent browser = grid
+                    ? Ui.virtualGrid(orderRows, this::orderGridCard)
+                            .key(row -> orderKey(row.order()))
+                            .minCellWidth(BoardBrowserLayout.gridCellMinWidth(browserWidth))
+                            .cellHeight(72).gap(4)
+                            .height(panelHeight).width(browserWidth)
+                    : Ui.list(orderRows, this::orderListRow)
+                            .key(row -> orderKey(row.order()))
+                            .itemHeight(39).gap(4)
+                            .height(panelHeight).width(browserWidth);
+
+            UIComponent details = Ui.component(() -> {
+                List<BoardSnapshot.OrderEntry> selection = selectedOrder.get();
+                if (selection.isEmpty()) return List.of(Ui.node("orders-empty", "empty",
+                        () -> Ui.card(Ui.column(
+                                Ui.heading("No matching orders"),
+                                Ui.text("Adjust your search or filters.")
+                        ).gap(6)).padding(7).height(panelHeight)));
+                BoardSnapshot.OrderEntry order = selection.get(0);
+                return List.of(Ui.node("order-detail", orderKey(order) + "@" + order.hashCode(),
+                        () -> orderDetails(order, panelHeight)));
+            }).width(detailWidth).height(panelHeight);
+
+            UIComponent browserPane = Ui.card(browser).padding(2)
+                    .width(browserWidth).height(panelHeight);
+            return mainWidth() >= 215
+                    ? centeredRow(browserPane, details).gap(6).height(panelHeight)
+                    : Ui.scroll(Ui.column(browserPane.height(93), details.height(160)).gap(5))
+                            .height(panelHeight);
+        }
+
+        /** Genuine compact grid tile. Expanded text/actions stay in details. */
         private UIComponent orderGridCard(OrderRow row) {
             BoardSnapshot.OrderEntry o = row.order();
-            String item = readableItem(o.item());
+            double ratio = o.quantity() <= 0 ? 0
+                    : Math.min(1.0, o.inInventory() / (double) o.quantity());
             return Ui.card(Ui.column(
                     centeredRow(OrderItemIcons.icon(o.item()),
-                            Ui.text(o.quantity() + " " + item).nowrap().ellipsis(true).flex()).gap(4),
-                    centeredRow(Ui.heading("$" + o.reward()),
-                            Ui.spacer(), Ui.text(compactRarity(o.rarity())).nowrap().ellipsis(true)).gap(2),
-                    centeredRow(Ui.text(compactScope(o.scope())),
-                            Ui.spacer(), Ui.text(isSpecial(o) ? "★ Special" : shortStatus(o.status()))
-                                    .nowrap().ellipsis(true)).gap(3),
-                    Ui.progress(Signals.of(o.quantity() == 0 ? 0
-                            : Math.min(1.0, o.inInventory() / (double) o.quantity()))).height(6),
-                    Ui.text(o.canAccept()
-                            ? o.inInventory() + "/" + o.quantity() + "  | " + shortOrderTime(o)
-                            : shortStatus(o.status())).nowrap().ellipsis(true)
-            ).gap(3)).padding(4).selected(row.selected()).elevated(false)
+                            Ui.text(o.quantity() + " " + readableItem(o.item()))
+                                    .nowrap().ellipsis(true).flex()).gap(3),
+                    centeredRow(Ui.heading("$" + o.reward()).nowrap().ellipsis(true),
+                            Ui.spacer(),
+                            Ui.text(compactRarity(o.rarity())).nowrap().ellipsis(true)).gap(2),
+                    centeredRow(Ui.text(compactScope(o.scope()) + (isSpecial(o) ? " ★" : ""))
+                                    .nowrap().ellipsis(true),
+                            Ui.spacer(),
+                            Ui.text(o.inInventory() + "/" + o.quantity())
+                                    .nowrap().ellipsis(true)).gap(2),
+                    Ui.progress(Signals.of(ratio)).height(5),
+                    Ui.text(shortOrderTime(o)).nowrap().ellipsis(true)
+            ).gap(2)).padding(3).selected(row.selected()).elevated(false)
                     .onClick(() -> selectedOrderKey.set(orderKey(o)));
         }
 
@@ -433,11 +474,9 @@ public final class BountyBoardClient {
                             Ui.text(readableItem(order.item())).nowrap().ellipsis(true)
                     ).gap(3).flex()
             ).gap(6));
-            content.add(centeredRow(
-                    Ui.badge(Component.literal(compactScope(order.scope())), Badge.Variant.NEUTRAL),
-                    Ui.badge(Component.literal(compactRarity(order.rarity())), rarityColor(order.rarity())),
-                    isSpecial(order) ? Ui.badge(Component.literal("Special"), Badge.Variant.WARNING) : Ui.spacer()
-            ).gap(3));
+            content.add(Ui.text(compactScope(order.scope()) + " · "
+                    + compactRarity(order.rarity()) + (isSpecial(order) ? " ★ Special" : ""))
+                    .nowrap().ellipsis(true));
             if (order.canAccept()) {
                 content.add(Ui.divider());
                 content.add(centeredRow(
@@ -458,7 +497,7 @@ public final class BountyBoardClient {
             content.add(Ui.divider());
             content.add(centeredRow(Ui.icon("$", 0x5BE0BC),
                     Ui.heading("$" + order.reward()), Ui.spacer()).gap(4));
-            content.add(Ui.text(orderTime(order)));
+            content.add(Ui.text("Offer: " + shortOrderTime(order)));
             if (order.canAccept()) content.add(Ui.text(switch (order.timer()) {
                 case "ACCEPT" -> "Delivery clock begins on acceptance";
                 case "OFFER" -> "Rush deadline already active";
@@ -482,10 +521,12 @@ public final class BountyBoardClient {
                 actions.add(Ui.button("Contracts", () -> tab.set("Generated")).primary().small());
             }
             UIComponent footer = actions.isEmpty() ? Ui.text("Auto-restocking")
-                    : centeredRow(actions.toArray(UIComponent[]::new)).gap(3);
+                    : centeredRow(actions.toArray(UIComponent[]::new))
+                            .gap(3).justify(Justification.END);
+            // Flex consumes only the space above the footer, placing actions
+            // against the actual bottom of this card at every GUI scale.
             return Ui.card(Ui.column(
-                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(54, height - 52)),
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(4)).flex(),
                     Ui.divider(),
                     footer
             ).gap(4)).padding(5).height(height);
@@ -723,10 +764,10 @@ public final class BountyBoardClient {
             if (bounty.canCancel()) actions.add(Ui.button("Cancel", () ->
                     sendBountyAction(bounty, false, true, false)).danger().small());
             UIComponent footer = actions.isEmpty() ? Ui.text("No actions available")
-                    : centeredRow(actions.toArray(UIComponent[]::new)).gap(4);
+                    : centeredRow(actions.toArray(UIComponent[]::new))
+                            .gap(4).justify(Justification.END);
             return Ui.card(Ui.column(
-                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(54, height - 52)),
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5)).flex(),
                     Ui.divider(),
                     footer
             ).gap(4)).padding(5).height(height);
@@ -840,14 +881,13 @@ public final class BountyBoardClient {
             }
             content.add(Ui.text("The server verifies payout funding and permissions on submission."));
             return Ui.card(Ui.column(
-                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(54, height - 54)),
+                    Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5)).flex(),
                     Ui.divider(),
                     centeredRow(
                             Ui.button("Back", () -> tab.set("Posted")).ghost().small(),
                             Ui.button("Preview", this::validateCreateDraft).small(),
                             Ui.button("Create & fund", this::submitCreate).primary().small()
-                    ).gap(3)
+                    ).gap(3).justify(Justification.END)
             ).gap(4)).padding(4).height(height);
         }
 
