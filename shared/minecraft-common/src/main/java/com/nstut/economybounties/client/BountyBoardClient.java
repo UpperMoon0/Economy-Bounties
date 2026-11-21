@@ -466,7 +466,7 @@ public final class BountyBoardClient {
                     : centeredRow(actions.toArray(UIComponent[]::new)).gap(3);
             return Ui.card(Ui.column(
                     Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(62, height - 37)),
+                            .height(Math.max(54, height - 52)),
                     Ui.divider(),
                     footer
             ).gap(4)).padding(5).height(height);
@@ -551,7 +551,7 @@ public final class BountyBoardClient {
             return centeredRow(
                     Ui.textField(search).placeholder(postedTab
                             ? "Search posted..." : "Search contracts...")
-                            .width(Math.max(87, mainWidth() - 229)),
+                            .width(Math.max(87, mainWidth() - 268)),
                     statusFilter,
                     Ui.select(sort).option("Expiry", "Expiry").option("Reward", "Reward")
                             .option("Progress", "Progress").width(70),
@@ -707,7 +707,7 @@ public final class BountyBoardClient {
                     : centeredRow(actions.toArray(UIComponent[]::new)).gap(4);
             return Ui.card(Ui.column(
                     Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(61, height - 36)),
+                            .height(Math.max(54, height - 52)),
                     Ui.divider(),
                     footer
             ).gap(4)).padding(5).height(height);
@@ -822,7 +822,7 @@ public final class BountyBoardClient {
             content.add(Ui.text("The server verifies payout funding and permissions on submission."));
             return Ui.card(Ui.column(
                     Ui.scroll(Ui.column(content.toArray(UIComponent[]::new)).gap(5))
-                            .height(Math.max(70, height - 38)),
+                            .height(Math.max(54, height - 54)),
                     Ui.divider(),
                     centeredRow(
                             Ui.button("Back", () -> tab.set("Posted")).ghost().small(),
