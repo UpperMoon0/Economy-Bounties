@@ -5,6 +5,8 @@ import com.nstut.economybounties.board.BoardRequest;
 import com.nstut.economybounties.board.BoardSnapshot;
 import com.nstut.economybounties.network.BountyNetwork;
 import com.nstut.economybounties.orders.OrderBoardService;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.math.BigDecimal;
@@ -42,6 +44,7 @@ public final class BountyBoardServer {
             notice = switch (request.action()) {
                 case REFRESH -> "";
                 case ACCEPT_ORDER -> acceptOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
+                case FULFILL_ORDER -> fulfillOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
                 case DISCARD_ORDER -> discardOrder(player, request.poolId(), request.objectiveIndex(), request.bountyId());
                 case ROLL -> roll(player, request.poolId());
                 case ACCEPT_GENERATED -> generatedAccept(player, request.bountyId());
@@ -86,7 +89,7 @@ public final class BountyBoardServer {
                 .toList();
         int playerLevel = MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID());
         List<BoardSnapshot.OrderEntry> orders = EconomyBountiesRuntime.ordersFor(player.getUUID(), playerLevel, now)
-                .stream().map(BountyBoardServer::orderEntry).toList();
+                .stream().map(card -> orderEntry(player, card)).toList();
         return new BoardSnapshot(pools, generated, posted, notice, orders);
     }
 
@@ -100,11 +103,63 @@ public final class BountyBoardServer {
                 || status == PostedBountyStatus.CANCELLED;
     }
 
-    private static BoardSnapshot.OrderEntry orderEntry(OrderBoardService.Card card) {
+    private static BoardSnapshot.OrderEntry orderEntry(ServerPlayer player, OrderBoardService.Card card) {
         return new BoardSnapshot.OrderEntry(card.board(), card.scope(), card.slot(),
                 card.offerId(), card.title(), card.item(), card.quantity(), card.reward(),
                 card.rarity(), card.timer(), card.status(), card.deadlineSeconds(), card.expiresAt(), card.restocksAt(),
-                card.canAccept(), card.canDiscard());
+                card.canAccept(), card.canDiscard(),
+                card.canAccept() ? inventoryCount(player, card.item()) : 0L);
+    }
+
+    private static long inventoryCount(ServerPlayer player, String itemId) {
+        if (itemId == null || itemId.isBlank()) return 0;
+        long count = 0;
+        var inventory = player.getInventory();
+        for (int index = 0; index < inventory.getContainerSize(); index++) {
+            ItemStack stack = inventory.getItem(index);
+            if (!stack.isEmpty() && itemId.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()))
+                count += stack.getCount();
+        }
+        return count;
+    }
+
+    /**
+     * Optional one-click delivery for orders already stocked in inventory.
+     * Every state mutation still uses the canonical accept -> scoped consume
+     * -> objective completion -> idempotent Economy payout chain.
+     */
+    private static String fulfillOrder(ServerPlayer player, String board, int slot, String offerId) {
+        NamespacedId id = NamespacedId.parse(required(board, "order board"));
+        UUID offer = uuid(offerId);
+        Instant now = Instant.now();
+        int level = MinecraftAudienceProvider.experienceLevel(EconomyBountiesRuntime.server(), player.getUUID());
+        OrderBoardService.Card card = EconomyBountiesRuntime.orders().list(player.getUUID(), level, now)
+                .stream()
+                .filter(entry -> entry.board().equals(id.toString()) && entry.slot() == slot
+                        && entry.offerId().equals(offerId) && entry.canAccept())
+                .findFirst().orElse(null);
+        if (card == null) return "That order is no longer available. Refresh the board.";
+        if (inventoryCount(player, card.item()) < card.quantity())
+            return "You need " + card.quantity() + " " + card.item() + " in your inventory to deliver now";
+
+        String accepted = EconomyBountiesRuntime.orders().accept(player.getUUID(), level, id, slot, offer, now);
+        UUID contract = OrderBoardService.issuedBountyId(offer, player.getUUID());
+        BountyView issued = EconomyBountiesRuntime.generated().get(player.getUUID(), contract, Instant.now())
+                .orElse(null);
+        if (issued == null || issued.status() != BountyStatus.ACTIVE) return accepted;
+
+        String delivery = BountyDeliveryService.deliver(player, "generated", contract.toString(), 0,
+                BuiltinObjectiveTypes.DELIVER_ITEM.toString(), card.item());
+        BountyView after = EconomyBountiesRuntime.generated().get(player.getUUID(), contract, Instant.now())
+                .orElse(null);
+        if (after == null || after.status() != BountyStatus.COMPLETED)
+            return delivery + ". You can finish this order under Contracts.";
+        BountyService.ClaimResult claimed = EconomyBountiesRuntime.generated().claim(
+                player.getUUID(), contract, Instant.now());
+        return claimed.status() == BountyService.ClaimResult.Status.PAID
+                || claimed.status() == BountyService.ClaimResult.Status.ALREADY_CLAIMED
+                ? "Delivery complete. $" + card.reward() + " credited to your Economy account."
+                : "Delivery recorded. Reward is pending; claim it from Contracts. " + claimed.message();
     }
 
     private static String acceptOrder(ServerPlayer player, String board, int slot, String offerId) {
