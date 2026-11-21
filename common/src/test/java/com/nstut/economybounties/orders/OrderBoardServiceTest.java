@@ -99,8 +99,8 @@ class OrderBoardServiceTest {
         assertEquals(BountyService.ClaimResult.Status.ALREADY_CLAIMED,
                 generated.claim(A,generatedBounty.instanceId(),NOW.plusSeconds(13)).status());
         assertEquals(1,payouts.get());
-        assertFalse(orders.list(A,0,NOW.plusSeconds(2)).get(0).canAccept());
-        assertTrue(orders.list(A,0,NOW.plusSeconds(6)).get(0).canAccept());
+        assertEquals("RESTOCKING", orders.list(A,0,NOW.plusSeconds(14)).get(0).status());
+        assertTrue(orders.list(A,0,NOW.plusSeconds(20)).get(0).canAccept());
     }
 
     @Test
@@ -115,9 +115,17 @@ class OrderBoardServiceTest {
         assertTrue(manager.accept(B,0,board.id(),0,UUID.fromString(first.offerId()),NOW).contains("Another player"));
         assertEquals(0,generated.list(B,NOW).size());
         assertEquals(NOW.plusSeconds(120),generated.list(A,NOW).get(0).expiresAt());
-        var rotated = manager.list(B,0,NOW.plusSeconds(6)).get(0);
+        // Acceptance does not refill a slot while the contract is unfinished.
+        assertEquals("CLAIMED",manager.list(B,0,NOW.plusSeconds(10)).get(0).status());
+        generated.recordProgress(new ProgressEvent(A,BuiltinObjectiveTypes.DELIVER_ITEM,
+                "minecraft:wheat",3,Map.of()),NOW.plusSeconds(11));
+        var instance = generated.list(A,NOW.plusSeconds(11)).get(0).instanceId();
+        assertEquals(BountyService.ClaimResult.Status.PAID,
+                generated.claim(A,instance,NOW.plusSeconds(12)).status());
+        assertEquals("RESTOCKING",manager.list(B,0,NOW.plusSeconds(13)).get(0).status());
+        var rotated = manager.list(B,0,NOW.plusSeconds(19)).get(0);
         assertNotEquals(first.offerId(),rotated.offerId());
-        assertTrue(manager.accept(B,0,board.id(),0,UUID.fromString(first.offerId()),NOW.plusSeconds(6)).contains("rotated"));
+        assertTrue(manager.accept(B,0,board.id(),0,UUID.fromString(first.offerId()),NOW.plusSeconds(19)).contains("rotated"));
     }
 
     @Test
